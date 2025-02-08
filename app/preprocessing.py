@@ -1,14 +1,15 @@
 import pandas as pd
 import warnings
+import numpy as np
 
 warnings.filterwarnings('ignore')
 
 #Удаляем те игры, в которых ID team = !2
 def remove_invalid_games(df):
-    
+
     # группируем данные по номеру игры
     grouped_data = df.groupby('ID game')
-    
+
     # список для хранения номеров игр, которые нужно удалить
     games_to_delete = []
 
@@ -22,78 +23,69 @@ def remove_invalid_games(df):
     
     # Подсчет кол-ва удаленных игр
     removed_games_count = len(games_to_delete)
-    
-    # Подсчет общего кол-ва игр до удаления
-    total_games_before = len(df['ID game'].unique())
-    
+        
     # Подсчет общего кол-ва игр после удаления
     total_games_after = len(cleaned_data['ID game'].unique())
     print("Результат работы функции remove_invalid_games:")
     print(f"Количество удаленных игр: {removed_games_count}")
     print(f"Количество оставшихся игр: {total_games_after}", "\n")
     
-    # Сохраняем
-    #cleaned_data.to_csv('Temp_df/cleaned_data___.csv', index=False)
-    
-    return cleaned_data#, games_to_delete
+    return cleaned_data
 
 #Удаление игр с дифицитом данных
 def process_game_data(df_player_game):
-    
     # Группируем данные по номеру игры
     grouped_data = df_player_game.groupby('ID game')
-    
-    # Создаем список для хранения номеров игр, которые нужно удалить
-    games_to_delete = []
+
+    # Списки для хранения номеров игр
+    games_to_delete = set()
     games_checked_first_condition = set()
 
-    # первуая проверка: берем только игры, в которых у обеих команд показатель времени на льду есть у как минимум 4 игроков
+    # Первая проверка: оставляем только игры, где у обеих команд есть хотя бы 4 игрока с `total time on ice`
     for name, group in grouped_data:
-        teams_with_time = []
-        for team_id in group['ID team'].unique():
-            team_data = group[group['ID team'] == team_id]
-            players_with_time = team_data['total time on ice'].notnull().sum()
-            if players_with_time >= 4:
-                teams_with_time.append(team_id)
+        teams_with_time = {
+            team_id
+            for team_id in group['ID team'].unique()
+            if group[group['ID team'] == team_id]['total time on ice'].notnull().sum() >= 4
+        }
         if len(teams_with_time) == 2:
             games_checked_first_condition.add(name)
         else:
-            games_to_delete.append(name)
-    
-    # вторая проверка: берем только игры с информацией о как минимум трех игроках у каждой команды в матче
-    for name, group in grouped_data:
-        if name in games_to_delete:
+            games_to_delete.add(name)
+
+    # Вторая проверка: оставляем только игры, где у каждой команды есть минимум 3 игрока с любыми показателями
+    for name in games_checked_first_condition:
+        group = grouped_data.get_group(name)
+        if group['ID team'].nunique() != 2:
+            games_to_delete.add(name)
             continue
-        if group['ID team'].nunique() == 2:
-            teams_with_info = []
-            for team_id in group['ID team'].unique():
-                team_data = group[group['ID team'] == team_id]
-                player_info = team_data[['pucks', 'a shot on target', 'throws by', 'total time on ice']].notnull().sum(axis=1)
-                if (player_info > 0).sum() >= 3:
-                    teams_with_info.append(team_id)
-            if len(teams_with_info) == 2:
-                continue
-        games_to_delete.append(name)
-    
-    
-    # Подсчет кол-ва удалнных игр
-    removed_games_count = len(games_to_delete)
-    
-    # Удаляем
+
+        teams_with_info = {
+            team_id
+            for team_id in group['ID team'].unique()
+            if (group[group['ID team'] == team_id][['pucks', 'a shot on target', 'throws by', 'total time on ice']]
+                .notnull().sum(axis=1) > 0).sum() >= 3
+        }
+        if len(teams_with_info) < 2:
+            games_to_delete.add(name)
+
+    # Удаляем выбранные игры
     cleaned_data = df_player_game[~df_player_game['ID game'].isin(games_to_delete)]
     
-    # Подсчет общего кол-ва игр после удаления
-    total_games_after = len(cleaned_data['ID game'].unique())
+    # Вычисляем статистику
+    removed_games_count = len(games_to_delete)
+    total_games_after = cleaned_data['ID game'].nunique()
+
+    # Вывод информации
     print("Результат работы функции process_game_data:")
-    # Выводим список номеров игр, которые будут удалены
-    print("Игры, которые будут удалены из-за недостаточного количества игроков с временем на льду или показателей меньше трех:")
-    print(games_to_delete)
-    
-    # сохраняем
-    cleaned_data.to_csv('data/interim/cleaned_data___.csv', index=False)
-    
     print(f"Количество удаленных игр: {removed_games_count}")
     print(f"Общее количество игр после удаления: {total_games_after}", "\n")
+
+    # Сохранение очищенных данных
+    cleaned_data.to_csv('data/interim/cleaned_data.csv', index=False)
+
+    return cleaned_data
+
 
 
 # Удаление лишних игркоков, у которых нет амплуа
@@ -116,31 +108,28 @@ def process_player_amplua(df_player_amplua, games_data):
     merged_data.to_csv('data/interim/cleaned_data___.csv', index=False)
 
 #Проверка есть ли те игроки, которые были когдато не вратарями и создание compile_stats
-#Те игроки, которые раньше были не вратарями, теперь имеют амплуа = 0
+#Те игроки, которые раньше были не вратарями, теперь имеют амплуа = 10 или 9
 def check_and_modify_amplua(merged_data_file):
 
-    merged_data = pd.read_csv(merged_data_file)
-    
-    # выбо игроков с амплуа 8
+    merged_data = pd.read_csv('data/interim/cleaned_data___.csv')
+    # Выбор игроков с амплуа 8
     players_amp8 = merged_data.loc[merged_data['amplua'] == 8]
 
-    # если хотя бы одно значение в столбцах 'pucks', 'a shot on target', 'blocked throws', 'trows by' > 0
+    # Если хотя бы одно значение в столбце 'total time on ice' > 1
     nonzero_columns = players_amp8[['total time on ice']].gt(1).any(axis=1)
 
-    # Подсчет количества значений True (не удовлетворяющих условию)
+    # Подсчет количества игроков, удовлетворяющих условию
     num_not_empty_values = nonzero_columns.sum()
     print("Результат работы функции check_and_modify_amplua:")
-    # Вывод
     print("Количество игроков, удовлетворяющих условию:", num_not_empty_values, "\n")
 
-    # Присвоим этим игрокам амплуа 0
-    # хотя бы одно значение больше 0
+    # Выбор игроков, которым нужно изменить амплуа
     players_to_change = players_amp8[nonzero_columns]
 
-    # Изменение значений столбца 'amplua' на 0 для выбранных игроков
-    merged_data.loc[players_to_change.index, 'amplua'] = 0
+    # Случайное присвоение амплуа 9 или 10
+    merged_data.loc[players_to_change.index, 'amplua'] = np.random.choice([9, 10], size=len(players_to_change))
 
-    # Удалить столбе 'pucks'
+    # Удаление столбца 'pucks'
     merged_data.drop('pucks', axis=1, inplace=True)
 
     merged_data.to_csv('compile_stats.csv', index=False)
@@ -563,34 +552,65 @@ def clean_compile_stats(file_path):
 
 #Проверка на странные игры, нужно доделать очистку
 def clean_problem(file_path, output_path):
+    # Чтение исходного файла
     compile_stats = pd.read_csv(file_path)
 
-    # Подсчет количества игроков с амплуа равным 8 для каждой игры
-    players_with_amplua_8 = compile_stats[compile_stats['amplua'] == 8].groupby('ID game').size().reset_index(name='count_amplua_8')
+    # Список столбцов с игровыми показателями для проверки
+    columns_to_check = ['total time on ice', 'throws by', 'a shot on target', 'blocked throws', 'p/m', 'goals', 'assists']
+    
+    # Заменяем нули на NaN (чтобы их можно было обнаружить как отсутствующие значения)
+    compile_stats[columns_to_check] = compile_stats[columns_to_check].replace({0: None})
 
-    # Выбор только тех игр, у которых количество игроков с амплуа равным 8 меньше двух
+    # ===============================================
+    # 1. Исправление записей: если у игрока хотя бы один из показателей равен 0 или отсутствует,
+    #    и в его команде (в данной игре) нет игрока с амплуа = 8, то назначаем ему амплуа = 8.
+    # ===============================================
+    # Перебираем по каждой игре
+    for game_id in compile_stats['ID game'].unique():
+        game_data = compile_stats[compile_stats['ID game'] == game_id]
+        # Перебираем по каждой команде в игре
+        for team_id in game_data['ID team'].unique():
+            team_data = game_data[game_data['ID team'] == team_id]
+            # Если в команде еще нет игрока с амплуа 8, то ищем кандидата для замены
+            if not any(team_data['amplua'] == 8):
+                # Находим индексы игроков, у которых хотя бы один из указанных показателей отсутствует
+                indices_to_fix = team_data[team_data[columns_to_check].isna().any(axis=1)].index
+                if len(indices_to_fix) > 0:
+                    # Присваиваем амплуа 8 этим игрокам
+                    compile_stats.loc[indices_to_fix, 'amplua'] = 8
+
+    # ===============================================
+    # 2. Теперь выполняем проверку и удаление "странных" игр:
+    #    - Игры, в которых общее количество игроков с амплуа = 8 меньше двух.
+    #    - Игры, в которых хотя бы в одной команде количество игроков с амплуа = 8 не равно 1.
+    # ===============================================
+
+    # Пересчёт количества игроков с амплуа 8 по играм
+    players_with_amplua_8 = compile_stats[compile_stats['amplua'] == 8]\
+                               .groupby('ID game')\
+                               .size()\
+                               .reset_index(name='count_amplua_8')
     games_with_few_players = players_with_amplua_8[players_with_amplua_8['count_amplua_8'] < 2]
     game_ids_with_few_players = games_with_few_players['ID game'].tolist()
-    print("Результат работы функции clean_problem:")
     print("ID игр с количеством игроков с амплуа равным 8 меньше двух:", game_ids_with_few_players)
 
-    # Подсчет количества игроков с амплуа 8 для каждой команды в каждой игре
-    players_with_amplua_8_team = compile_stats[compile_stats['amplua'] == 8].groupby(['ID game', 'ID team']).size().reset_index(name='count_amplua_8')
-
-    # Поиск игр с командами, у которых количество игроков с амплуа 8 не равно 1
+    # Пересчёт количества игроков с амплуа 8 по каждой команде в игре
+    players_with_amplua_8_team = compile_stats[compile_stats['amplua'] == 8]\
+                                    .groupby(['ID game', 'ID team'])\
+                                    .size()\
+                                    .reset_index(name='count_amplua_8')
     games_with_inconsistent_amplua_count = players_with_amplua_8_team[players_with_amplua_8_team['count_amplua_8'] != 1]['ID game'].unique()
     print("ID игр, в которых у какой-то команды количество игроков с амплуа 8 не равно 1:", games_with_inconsistent_amplua_count)
 
-    # Удаление игр с количеством игроков с амплуа равным 8 меньше двух и игр с непоследовательным количеством игроков с амплуа 8
+    # Объединяем ID игр, подлежащих удалению
     all_games_to_remove = set(game_ids_with_few_players).union(set(games_with_inconsistent_amplua_count))
-    
     compile_stats = compile_stats[~compile_stats['ID game'].isin(all_games_to_remove)]
 
-    # Удаление всех строк с определенными ID game
+    # Удаляем также игры с заранее заданными ID
     specific_game_ids_to_remove = [7273, 10138, 9484, 1111, 8914]
     compile_stats = compile_stats[~compile_stats['ID game'].isin(specific_game_ids_to_remove)]
 
-    # Сохранение изменений в файл compile_stats
+    # Сохранение итоговых данных в указанный файл
     compile_stats.to_csv(output_path, index=False)
 
     unique_game_count = compile_stats['ID game'].nunique()
