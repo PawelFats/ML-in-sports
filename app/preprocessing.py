@@ -82,36 +82,28 @@ def process_game_data(df_player_game):
     print(f"Общее количество игр после удаления: {total_games_after}", "\n")
 
     # Сохранение очищенных данных
-    cleaned_data.to_csv('data/interim/cleaned_data.csv', index=False)
+    #cleaned_data.to_csv('data/interim/cleaned_data.csv', index=False)
 
     return cleaned_data
 
-
-
 # Удаление лишних игркоков, у которых нет амплуа
 def process_player_amplua(df_player_amplua, games_data):
-
-    games_data = pd.read_csv('data/interim/cleaned_data___.csv')
-    
-    # Загрузка таблицы амплуа
-    players_data = pd.read_csv("data/raw/players_amplua.csv", sep=";")
-    
+       
     # уникальные игроки
     unique_players = games_data['ID player'].unique()
     
     # Фильтрация данных
-    filtered_players_data = players_data[players_data['ID player'].isin(unique_players)]
+    filtered_players_data = df_player_amplua[df_player_amplua['ID player'].isin(unique_players)]
     
     # Добавление амплуа к статистике
     merged_data = pd.merge(games_data, filtered_players_data, on='ID player', how='left')
     
-    merged_data.to_csv('data/interim/cleaned_data___.csv', index=False)
+    return merged_data
 
 #Проверка есть ли те игроки, которые были когдато не вратарями и создание compile_stats
 #Те игроки, которые раньше были не вратарями, теперь имеют амплуа = 10 или 9
-def check_and_modify_amplua(merged_data_file):
+def check_and_modify_amplua(merged_data):
 
-    merged_data = pd.read_csv('data/interim/cleaned_data___.csv')
     # Выбор игроков с амплуа 8
     players_amp8 = merged_data.loc[merged_data['amplua'] == 8]
 
@@ -131,71 +123,180 @@ def check_and_modify_amplua(merged_data_file):
 
     # Удаление столбца 'pucks'
     merged_data.drop('pucks', axis=1, inplace=True)
-
-    merged_data.to_csv('compile_stats.csv', index=False)
     
     return merged_data
 
+def remove_inconsistent_games(df):
+    inconsistent_games = set()
+
+    for (game_id, team_id), group in df.groupby(['ID game', 'ID team']):
+        # Формируем множества, исключая нулевые значения в IDp_in_ice
+        unique_in_ice = set(group['IDp_in_ice']) - {0}  
+        unique_out_ice = set(group['IDp_out_ice']) - {0}
+
+        # Если вратари в этих столбцах разные и их больше одного, игра считается некорректной
+        if len(unique_in_ice) > 1 or len(unique_out_ice) > 1 and unique_in_ice != unique_out_ice:
+            inconsistent_games.add(game_id)
+
+    # Отбираем удаленные строки для анализа
+    removed_rows = df[df['ID game'].isin(inconsistent_games)]
+
+    # Фильтруем DataFrame, удаляя некорректные игры
+    cleaned_df = df[~df['ID game'].isin(inconsistent_games)]
+
+    print("Результат работы фукнции remove_inconsistent_games:")
+    print(f"Удалено игр:{len(removed_rows)}", "\n")
+
+    #print(f"Удалены игры: {sorted(inconsistent_games)}")
+    #print("Первые 10 удаленных строк:")
+    #print(removed_rows.head(10))
+
+    return cleaned_df
+
 #Удаление тех ID game из таблицы goalkeeper_event, которых нет в таблице compile_stats
-def filter_goalkeeper_event_by_compile_stats(goalkeeper_event_path, compile_stats_path, output_path):
-    # игры
-    compile_stats = pd.read_csv(compile_stats_path)
+def filter_goalkeeper_event_by_compile_stats(goalkeeper_event, compile_stats):
+    # Получаем уникальные ID игр из обоих столбцов
+    common_games = set(goalkeeper_event['ID game']) & set(compile_stats['ID game'])
+    
+    # Фильтруем таблицу goalkeeper_event, оставляя только игры, которые есть в обоих
+    goalkeeper_event_filtered = goalkeeper_event[goalkeeper_event['ID game'].isin(common_games)]
+    compl_filtred = compile_stats[compile_stats['ID game'].isin(common_games)]
 
-    # вратари
-    goalkeeper_event = pd.read_csv(goalkeeper_event_path, sep=";")
+    print("Результат работы функции filter_goalkeeper_event_by_compile_stats:")
+    print(f"Количество общих игр в обеих таблицах: {len(common_games)}", "\n")
+    
+    goalkeeper_event_filtered.to_csv("goalkeeper_event_filtered.csv", index=False)
+    compl_filtred.to_csv("compl_filtred.csv", index=False)
 
-    # Оставляем только те строки из таблицы goalkeeper_event, которые содержат ID game из таблицы compile_stats
-    goalkeeper_event_filtered = goalkeeper_event[goalkeeper_event['ID game'].isin(compile_stats['ID game'])]
+    return goalkeeper_event_filtered, compl_filtred
 
-    # Сохранение отфильтрованных данных обратно в файл filtered_goalkeeper_event.csv
-    goalkeeper_event_filtered.to_csv(output_path, index=False)
+# def merge_goalkeeper_events(compile_stats, goalkeeper_event):
+#     new_rows = []  # Список для добавления новых вратарей
+#     games_to_remove = []  # Игры, где обоих вратарей нет в goalkeeper_event
 
-#Мерж с таблицей играх вратарей, восстановление вратарей в играх(бывает что их два, а был один, или вообще нету в статистике)
-def merge_goalkeeper_events(compile_stats_file, goalkeeper_event_file):
-    # игры
-    compile_stats = pd.read_csv(compile_stats_file)
+#     # Проход по каждой команде в каждой игре
+#     for (game_id, team_id), group in goalkeeper_event.groupby(['ID game', 'ID team']):
+#         # Вратари из таблицы goalkeeper_event (те, кто реально выходил на лед)
 
-    # вратари
-    goalkeeper_event = pd.read_csv(goalkeeper_event_file)
+#         if (group['IDp_in_ice'] != 0).any():
+#             goalkeepers_in_event = set(group['IDp_in_ice']) - {0}
+#         elif (group['IDp_out_ice'] != 0).any():
+#             goalkeepers_in_event = set(group['IDp_out_ice']) - {0}
 
-    # список новых строк
-    new_rows = []
+#         # Вратари из compile_stats
+#         goalkeepers_in_stats = set(compile_stats.loc[
+#             (compile_stats['ID game'] == game_id) & 
+#             (compile_stats['ID team'] == team_id) & 
+#             (compile_stats['amplua'] == 8), 
+#             'ID player'
+#         ])
 
-    # Проход по каждой строке таблицы вратарей
-    for index, row in goalkeeper_event.iterrows():
-        game_id = row['ID game']
-        team_id = row['ID team']
-        player_id = row['IDp_in_ice']
+#         # Если у команды два вратаря в compile_stats, но один из них не в goalkeeper_event
+#         if len(goalkeepers_in_stats) > 1:
+#             # Проверяем, какие вратари есть в goalkeeper_event
+#             keepers_to_remove = goalkeepers_in_stats - goalkeepers_in_event  # Кого нет в event
+#             keepers_to_keep = goalkeepers_in_stats & goalkeepers_in_event  # Кого можно оставить
 
-        # Пропускаем игроков с IDp_in_ice равным 0
-        if player_id == 0:
-            continue
+#             if keepers_to_keep:
+#                 # Удаляем только тех, кого нет в goalkeeper_event
+#                 compile_stats = compile_stats[~(
+#                     (compile_stats['ID game'] == game_id) & 
+#                     (compile_stats['ID team'] == team_id) & 
+#                     (compile_stats['ID player'].isin(keepers_to_remove))
+#                 )]
+#             else:
+#                 # Если ни один из двух вратарей не найден в goalkeeper_event — удаляем всю игру
+#                 games_to_remove.append(game_id)
+#                 print(game_id)
+#                 continue  # Переход к следующей игре
 
-        # Поиск игрока в таблице игр и присвоение амплуа = 8
-        compile_stats.loc[(compile_stats['ID game'] == game_id) & 
-                          (compile_stats['ID player'] == player_id), 'amplua'] = 8
+#         # Если вратаря в compile_stats нет, но он есть в goalkeeper_event — добавляем
+#         if not goalkeepers_in_stats and goalkeepers_in_event:
+#             for gk in goalkeepers_in_event:
+#                 new_rows.append({'ID game': game_id, 'ID team': team_id, 'ID player': gk, 'amplua': 8})
 
-        # Допо. проверка: если не найден игрок с таким же ID как в IDp_on_ice
-        # и в команде нет игрока с амплуа = 8, добавляем новую запись в new_rows
-        if not ((compile_stats['ID game'] == game_id) & 
-                (compile_stats['ID team'] == team_id) &
-                (compile_stats['amplua'] == 8)).any():
-            new_rows.append({'ID game': game_id, 'ID team': team_id, 'ID player': player_id, 'amplua': 8})
+#     # Удаляем игры, где обоих вратарей нет в goalkeeper_event
+#     compile_stats = compile_stats[~compile_stats['ID game'].isin(games_to_remove)]
 
-    # Добавление новых строк в компаил_статс
+#     # Добавляем новых вратарей
+#     if new_rows:
+#         compile_stats = pd.concat([compile_stats, pd.DataFrame(new_rows)], ignore_index=True)
+
+#     print("merge_goalkeeper_events:")
+#     print(f"Удалено игр с обоими неправильными вратарями: {len(games_to_remove)}")
+#     print(f"Добавлено вратарей в игры: {len(new_rows)}")
+
+#     compile_stats.to_csv("check.csv", index=False)
+#     return compile_stats
+
+def merge_goalkeeper_events(compile_stats, goalkeeper_event):
+    new_rows = []  # Список для добавления новых вратарей
+    games_to_remove = []  # Игры, где обоих вратарей нет в goalkeeper_event
+
+    # Проход по каждой команде в каждой игре
+    for (game_id, team_id), group in goalkeeper_event.groupby(['ID game', 'ID team']):
+        # Вратари из таблицы goalkeeper_event (те, кто реально выходил на лед)
+        if (group['IDp_in_ice'] != 0).any():
+            goalkeepers_in_event = set(group['IDp_in_ice']) - {0}
+        elif (group['IDp_out_ice'] != 0).any():
+            goalkeepers_in_event = set(group['IDp_out_ice']) - {0}
+        else:
+            goalkeepers_in_event = set()
+
+        # Вратари из compile_stats (проверяем по ID игрока, а не по амплуа)
+        players_in_stats = compile_stats.loc[
+            (compile_stats['ID game'] == game_id) & (compile_stats['ID team'] == team_id),
+            ['ID player', 'amplua']
+        ]
+        
+        goalkeepers_in_stats = set(players_in_stats['ID player'])
+        
+        # Обновляем амплуа для игроков, которые есть в stats, но не как вратари
+        compile_stats.loc[
+            (compile_stats['ID game'] == game_id) & 
+            (compile_stats['ID team'] == team_id) & 
+            (compile_stats['ID player'].isin(goalkeepers_in_event)),
+            'amplua'
+        ] = 8
+
+        # Если у команды два вратаря в compile_stats, но один из них не в goalkeeper_event
+        if len(goalkeepers_in_stats) > 1:
+            keepers_to_remove = goalkeepers_in_stats - goalkeepers_in_event  # Кого нет в event
+            keepers_to_keep = goalkeepers_in_stats & goalkeepers_in_event  # Кого можно оставить
+
+            if keepers_to_keep:
+                compile_stats = compile_stats[~(
+                    (compile_stats['ID game'] == game_id) & 
+                    (compile_stats['ID team'] == team_id) & 
+                    (compile_stats['ID player'].isin(keepers_to_remove))
+                )]
+            else:
+                games_to_remove.append(game_id)
+                print(game_id)
+                continue  # Переход к следующей игре
+
+        # Если вратаря в compile_stats нет, но он есть в goalkeeper_event — добавляем
+        if not goalkeepers_in_stats and goalkeepers_in_event:
+            for gk in goalkeepers_in_event:
+                new_rows.append({'ID game': game_id, 'ID team': team_id, 'ID player': gk, 'amplua': 8})
+
+    # Удаляем игры, где обоих вратарей нет в goalkeeper_event
+    compile_stats = compile_stats[~compile_stats['ID game'].isin(games_to_remove)]
+
+    # Добавляем новых вратарей
     if new_rows:
         compile_stats = pd.concat([compile_stats, pd.DataFrame(new_rows)], ignore_index=True)
 
-    compile_stats.to_csv('compile_stats.csv', index=False)
-    
+    print("merge_goalkeeper_events:")
+    print(f"Удалено игр с обоими неправильными вратарями: {len(games_to_remove)}")
+    print(f"Добавлено вратарей в игры: {len(new_rows)}")
+
+    compile_stats.to_csv("check.csv", index=False)
     return compile_stats
 
+
 #Добавим возраст к игрокам
-def add_age_to_players_stats(compile_stats_file, player_age_file):
-
-    compile_stats = pd.read_csv(compile_stats_file)
-
-    player_age = pd.read_csv(player_age_file, sep=";")
+def add_age_to_players_stats(compile_stats, player_age):
 
     # Получение списка уникальных игроков из таблицы с игроками
     unique_players = compile_stats['ID player'].unique()
@@ -205,16 +306,11 @@ def add_age_to_players_stats(compile_stats_file, player_age_file):
 
     # Добавление возраста к статистике игроков
     merged_data = pd.merge(compile_stats, filtered_players_data, on='ID player', how='left')
-
-    merged_data.to_csv('compile_stats.csv', index=False)
     
     return merged_data
 
 #Удаляем тех у кого путстые строки кроме вратарей
-def remove_empty_rows(compile_stats_file):
-
-    merged_data = pd.read_csv(compile_stats_file)
-
+def remove_empty_rows(merged_data):
     # Создаем условия для фильтрации строк
     condition1 = (merged_data['amplua'] != 8)
     condition2 = (merged_data['total time on ice'] < 10) & \
@@ -267,18 +363,12 @@ def validation_for_pm(game_plus_minus):
     # Считаем кол-во удаленных ID event и кол-во игр с неполными данными
     incomplete_events_after = len(incomplete_event_ids)
     incomplete_games = len(game_plus_minus_cleaned['ID game'].unique())
-
-    game_plus_minus_cleaned.to_csv('data/interim/game_plus_minus_d.csv', index=False)
     
     return game_plus_minus_cleaned
 
 
 #Удаление тех ID game которых для которых нету +/- вообще
-def remove_PL_game(compile_stats_file, plus_minus_player_game_file):
-
-    compile_stats = pd.read_csv(compile_stats_file)
-    
-    plus_minus_player_game = pd.read_csv(plus_minus_player_game_file)
+def remove_PL_game(compile_stats, plus_minus_player_game):
 
     # Получение списка уникальных ID game из файла plus_minus_player_game
     valid_game_ids = plus_minus_player_game['ID game'].unique()
@@ -286,13 +376,11 @@ def remove_PL_game(compile_stats_file, plus_minus_player_game_file):
     # Фильтрация данных в compile_stats по ID game, оставляем только те строки, которые присутствуют в plus_minus_player_game
     compile_stats_filtered = compile_stats[compile_stats['ID game'].isin(valid_game_ids)]
 
-    compile_stats_filtered.to_csv('compile_stats.csv', index=False)
+    return compile_stats_filtered
 
 
 #Сумма, подсчет +/- для игрокв в каждом матче
-def calculate_plus_minus(df_plus_minus_file):
-
-    df_plus_minus = pd.read_csv(df_plus_minus_file)
+def calculate_plus_minus(df_plus_minus):
 
     # Создаем пустой датафрейм для хранения результатов
     df_pm = pd.DataFrame(columns=['ID season', 'ID game', 'ID team', 'ID player', 'p/m'])
@@ -337,26 +425,19 @@ def calculate_plus_minus(df_plus_minus_file):
     # Объединяем все датафреймы
     df_pm = pd.concat(dfs, ignore_index=True)
 
-    df_pm.to_csv('data/interim/plus_minus_player_game.csv', index=False)
+    return df_pm
 
 #Добавляем показатель +/-
-def add_plus_minus(compile_stats_file, df_plus_minus_file):
+def add_plus_minus(merged_data, df_plus_minus):
 
-    merged_data = pd.read_csv(compile_stats_file)
-    
-    df_plus_minus = pd.read_csv(df_plus_minus_file)
-
-    # Объединение данных по столбцам 'ID game', 'ID team', 'ID player'
     merged_data = pd.merge(merged_data, df_plus_minus, on=['ID game', 'ID team', 'ID player'], how='left')
     
     merged_data.drop('ID season', axis=1, inplace=True)
 
-    merged_data.to_csv('compile_stats.csv', index=False)
+    return merged_data
 
 # Проверка анамалий, если игрок по времени не был на льду а p/m есть, то удаляем эту игру
 def remove_games_with_missing_time(df):
-
-    df = pd.read_csv(df)
     
     # условия для удаления
     condition = (df['p/m'].notnull()) & (df['total time on ice'].isnull())
@@ -376,15 +457,11 @@ def remove_games_with_missing_time(df):
     print("Результат работы функции remove_games_with_missing_time:")
     print(f"Количество удаленных игр: {removed_games_count}")
     print(f"Общее количество игр после удаления: {total_games_after}", "\n")
-    #############################
-    cleaned_df.to_csv('compile_stats.csv', index=False)
 
+    return cleaned_df
 
 # Дабавление голов и пассов
-def add_goals_and_assists(compile_stats_file, goals_and_passes_file):
-
-    df_merged = pd.read_csv(compile_stats_file)
-    df_goals_and_passes = goals_and_passes_file
+def add_goals_and_assists(df_merged, df_goals_and_passes):
 
     # Груп таблицы goals_and_passes по 'ID game', 'ID team', 'ID player scored' для подсчета голов
     goals_grouped = df_goals_and_passes.groupby(['ID game', 'ID team', 'ID player scored']).size().reset_index(name='goals')
@@ -403,14 +480,11 @@ def add_goals_and_assists(compile_stats_file, goals_and_passes_file):
     # Удаление лишних столбцов, если они были добавлены из goals_grouped и assists_grouped
     merged_data.drop(['ID player scored', 'ID player assist'], axis=1, inplace=True, errors='ignore')
 
-    merged_data.to_csv('compile_stats.csv', index=False)
+    return merged_data
 
 #те игры в которы больше двух вратарей зарегано
 #те игры , в которых была замена
-def filter_goalkeeper_events(compile_stats_path, goalkeeper_event_path, output_filtered_path, output_replacements_path, sep=";"):
-    # Чтение данных из файлов
-    compile_stats = pd.read_csv(compile_stats_path)
-    goalkeeper_event = pd.read_csv(goalkeeper_event_path, sep=sep)
+def filter_goalkeeper_events(compile_stats, goalkeeper_event, output_filtered_path, output_replacements_path):
     
     # Группировка по ID game и амплуа, подсчет количества игроков
     player_counts = compile_stats.groupby(['ID game', 'amplua']).size().unstack(fill_value=0)
@@ -419,7 +493,7 @@ def filter_goalkeeper_events(compile_stats_path, goalkeeper_event_path, output_f
     amplua_8_counts = player_counts[8]
     
     # Выбор игр, где количество игроков с амплуа 8 больше двух
-    selected_games = amplua_8_counts[amplua_8_counts > 2]
+    selected_games = amplua_8_counts[amplua_8_counts != 2]
     
     # Получение ID игр
     selected_game_ids = selected_games.index.tolist()
@@ -468,7 +542,7 @@ def filter_goalkeeper_events(compile_stats_path, goalkeeper_event_path, output_f
     print("Количество уникальных ID game (с заменой вратарей):", unique_game_count_with_changes, "\n")
 
 
-def del_swap_goalk(filtered_event_path, goalkeeper_replace_path, compile_stats_path, output_filtered_event_path, output_compile_stats_path):
+def del_swap_goalk(filtered_event_path, goalkeeper_replace_path, compile_stats, output_filtered_event_path, output_compile_stats_path):
     # Чтение данных из файлов
     filtered_goalkeeper_event = pd.read_csv(filtered_event_path)
     goalkeeper_replace = pd.read_csv(goalkeeper_replace_path)
@@ -482,7 +556,7 @@ def del_swap_goalk(filtered_event_path, goalkeeper_replace_path, compile_stats_p
     # Удаление тех вратарей, которые не участвовали в игре
     # Загрузка данных из таблиц
     filtered_goalkeeper_event_filtered = pd.read_csv(output_filtered_event_path)
-    compile_stats_filtered = pd.read_csv(compile_stats_path)
+    compile_stats_filtered = compile_stats
     
     rows_to_remove = []
     
@@ -511,7 +585,6 @@ def del_swap_goalk(filtered_event_path, goalkeeper_replace_path, compile_stats_p
     compile_stats_filtered.to_csv(output_compile_stats_path, index=False)
     
     # Удаление строк из compile_stats_filtered, где ID game присутствует в списке games_to_remove
-    compile_stats = pd.read_csv(compile_stats_path)
     games_to_remove = goalkeeper_replace['ID game'].unique()
     
     # Удаление строк из compile_stats, где ID game присутствует в списке games_to_remove
@@ -533,16 +606,19 @@ def clean_compile_stats(file_path):
     compile_stats = compile_stats[~compile_stats['ID game'].isin(games_to_remove)]
     
     unique_game_count = compile_stats['ID game'].nunique()
+
     print("Результат работы функции clean_compile_stats:")
+    print(f"ИГры с двумя вратарями:{games_to_remove}")
+    print(f"списка ID игр, где количество игроков с amplua = 8 больше двух:{len(games_to_remove)}")
     print("Количество уникальных ID game после удаления игр с более чем двумя игроками amplua = 8:", unique_game_count)
     
-    # Замена пустых значений на 0
-    compile_stats.fillna(0, inplace=True)
+    # # Замена пустых значений на 0
+    # compile_stats.fillna(0, inplace=True)
     
-    # Удаление строк, в которых игроки имеют амплуа, отличное от 8, и все указанные столбцы содержат нулевые значения
-    compile_stats = compile_stats[~((compile_stats['amplua'] != 8) & (
-            compile_stats[['total time on ice', 'throws by', 'a shot on target', 'blocked throws', 'p/m', 'goals', 'assists']].eq(0).all(axis=1)
-    ))]
+    # # Удаление строк, в которых игроки имеют амплуа, отличное от 8, и все указанные столбцы содержат нулевые значения
+    # compile_stats = compile_stats[~((compile_stats['amplua'] != 8) & (
+    #         compile_stats[['total time on ice', 'throws by', 'a shot on target', 'blocked throws', 'p/m', 'goals', 'assists']].eq(0).all(axis=1)
+    # ))]
     
     # Сохранение отфильтрованных данных в CSV файл
     compile_stats.to_csv(file_path, index=False)
