@@ -226,7 +226,7 @@ def process_season_data(season):
     return game_before_season_var, unique_teams
 
 # Функция для получения вероятностей побед для всех уникальных матчей в каждом дивизионе
-def simulate_all_matches(division_teams):
+def simulate_all_matches(new_models, division_teams, matches):
     match_results = []
     for division, teams in division_teams.items():
         for i in range(len(teams)):
@@ -234,8 +234,8 @@ def simulate_all_matches(division_teams):
                 team1_id = teams[i]
                 team2_id = teams[j]
                 # Получение вероятности победы команды 1
-                win_probability_lr1 = get_team_win_probability(team1_id, team2_id)
-                win_probability_lr2 = get_team_win_probability(team2_id, team1_id)
+                win_probability_lr1 = get_team_win_probability(new_models, matches, team1_id, team2_id)
+                win_probability_lr2 = get_team_win_probability(new_models, matches, team1_id, team2_id)
                 
                 # Получение вероятностей
                 probabilities = [win_probability_lr1, win_probability_lr2]
@@ -260,9 +260,9 @@ def calculate_average_highest_probabilities(match_df):
     return division_probabilities
 
 # Генетический алгоритм распределения, работает на данном этапе лучше предыдущих
-def rank_teams(list_team, model_file, num_divisions, min_teams_per_division=3, num_generations=100, population_size=300):
-    model = joblib.load(model_file)
-    
+def rank_teams(matches, list_team, model_file, num_divisions, min_teams_per_division=3, num_generations=100, population_size=300):
+    #model = joblib.load(model_file)
+    model = model_file
     # Получение уникальных команд
     unique_teams = list_team['ID team'].unique()
     num_teams = len(unique_teams)
@@ -274,8 +274,8 @@ def rank_teams(list_team, model_file, num_divisions, min_teams_per_division=3, n
     for team1 in unique_teams:
         for team2 in unique_teams:
             if team1 != team2:
-                win_prob1 = get_team_win_probability(team1, team2)
-                win_prob2 = get_team_win_probability(team2, team1)
+                win_prob1 = get_team_win_probability(model, matches, team1, team2)
+                win_prob2 = get_team_win_probability(model, matches, team1, team2)
                 probabilities = normalize_probabilities([win_prob1, win_prob2])
                 all_matches.append([team1, team2, probabilities[0] * 100, probabilities[1] * 100])
     

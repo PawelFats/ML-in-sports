@@ -172,65 +172,6 @@ def filter_goalkeeper_event_by_compile_stats(goalkeeper_event, compile_stats):
 
     return goalkeeper_event_filtered, compl_filtred
 
-# def merge_goalkeeper_events(compile_stats, goalkeeper_event):
-#     new_rows = []  # Список для добавления новых вратарей
-#     games_to_remove = []  # Игры, где обоих вратарей нет в goalkeeper_event
-
-#     # Проход по каждой команде в каждой игре
-#     for (game_id, team_id), group in goalkeeper_event.groupby(['ID game', 'ID team']):
-#         # Вратари из таблицы goalkeeper_event (те, кто реально выходил на лед)
-
-#         if (group['IDp_in_ice'] != 0).any():
-#             goalkeepers_in_event = set(group['IDp_in_ice']) - {0}
-#         elif (group['IDp_out_ice'] != 0).any():
-#             goalkeepers_in_event = set(group['IDp_out_ice']) - {0}
-
-#         # Вратари из compile_stats
-#         goalkeepers_in_stats = set(compile_stats.loc[
-#             (compile_stats['ID game'] == game_id) & 
-#             (compile_stats['ID team'] == team_id) & 
-#             (compile_stats['amplua'] == 8), 
-#             'ID player'
-#         ])
-
-#         # Если у команды два вратаря в compile_stats, но один из них не в goalkeeper_event
-#         if len(goalkeepers_in_stats) > 1:
-#             # Проверяем, какие вратари есть в goalkeeper_event
-#             keepers_to_remove = goalkeepers_in_stats - goalkeepers_in_event  # Кого нет в event
-#             keepers_to_keep = goalkeepers_in_stats & goalkeepers_in_event  # Кого можно оставить
-
-#             if keepers_to_keep:
-#                 # Удаляем только тех, кого нет в goalkeeper_event
-#                 compile_stats = compile_stats[~(
-#                     (compile_stats['ID game'] == game_id) & 
-#                     (compile_stats['ID team'] == team_id) & 
-#                     (compile_stats['ID player'].isin(keepers_to_remove))
-#                 )]
-#             else:
-#                 # Если ни один из двух вратарей не найден в goalkeeper_event — удаляем всю игру
-#                 games_to_remove.append(game_id)
-#                 print(game_id)
-#                 continue  # Переход к следующей игре
-
-#         # Если вратаря в compile_stats нет, но он есть в goalkeeper_event — добавляем
-#         if not goalkeepers_in_stats and goalkeepers_in_event:
-#             for gk in goalkeepers_in_event:
-#                 new_rows.append({'ID game': game_id, 'ID team': team_id, 'ID player': gk, 'amplua': 8})
-
-#     # Удаляем игры, где обоих вратарей нет в goalkeeper_event
-#     compile_stats = compile_stats[~compile_stats['ID game'].isin(games_to_remove)]
-
-#     # Добавляем новых вратарей
-#     if new_rows:
-#         compile_stats = pd.concat([compile_stats, pd.DataFrame(new_rows)], ignore_index=True)
-
-#     print("merge_goalkeeper_events:")
-#     print(f"Удалено игр с обоими неправильными вратарями: {len(games_to_remove)}")
-#     print(f"Добавлено вратарей в игры: {len(new_rows)}")
-
-#     compile_stats.to_csv("check.csv", index=False)
-#     return compile_stats
-
 def merge_goalkeeper_events(compile_stats, goalkeeper_event):
     new_rows = []  # Список для добавления новых вратарей
     games_to_remove = []  # Игры, где обоих вратарей нет в goalkeeper_event
