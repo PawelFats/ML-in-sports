@@ -81,9 +81,6 @@ def process_game_data(df_player_game):
     print(f"Количество удаленных игр: {removed_games_count}")
     print(f"Общее количество игр после удаления: {total_games_after}", "\n")
 
-    # Сохранение очищенных данных
-    #cleaned_data.to_csv('data/interim/cleaned_data.csv', index=False)
-
     return cleaned_data
 
 # Удаление лишних игркоков, у которых нет амплуа

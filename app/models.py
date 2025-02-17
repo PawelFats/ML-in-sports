@@ -160,7 +160,9 @@ def get_team_win_probability(new_models, matches, team1_id, team2_id):
     team1_vector = GetTeamStat(team1_id, matches)
     team2_vector = GetTeamStat(team2_id, matches)
     difference_vector = [team1_value - team2_value for team1_value, team2_value in zip(team1_vector, team2_vector)]
-    predicted_probability = new_models["LogisticRegression"].predict_proba([difference_vector])[:, 1]
+    #predicted_probability = new_models["LogisticRegression"].predict_proba([difference_vector])[:, 1]
+    predicted_probability = new_models.predict_proba([difference_vector])[:, 1]
+    
     return predicted_probability[0]
 
 # Преобразование вероятностей в проценты с помощью нормализации
@@ -227,29 +229,36 @@ def process_season_data(season):
 
 # Функция для получения вероятностей побед для всех уникальных матчей в каждом дивизионе
 def simulate_all_matches(new_models, division_teams, matches):
-    match_results = []
-    for division, teams in division_teams.items():
-        for i in range(len(teams)):
-            for j in range(i + 1, len(teams)):  # Изменено для избегания дублирования матчей
-                team1_id = teams[i]
-                team2_id = teams[j]
-                # Получение вероятности победы команды 1
-                win_probability_lr1 = get_team_win_probability(new_models, matches, team1_id, team2_id)
-                win_probability_lr2 = get_team_win_probability(new_models, matches, team1_id, team2_id)
-                
-                # Получение вероятностей
-                probabilities = [win_probability_lr1, win_probability_lr2]
-                
-                # Нормализация вероятностей
-                normalized_probs = normalize_probabilities(probabilities)
+    try:
+        match_results = []
+        #print(division_teams)
+        for division, teams in division_teams.items():
+            for i in range(len(teams)):
+                for j in range(i + 1, len(teams)):  # Изменено для избегания дублирования матчей
+                    team1_id = teams[i]
+                    team2_id = teams[j]
+                    #print(f"team1_id = {team1_id}")
+                    #print(f"team2_id = {team1_id}")
+                    # Получение вероятности победы команды 1
+                    win_probability_lr1 = get_team_win_probability(new_models, matches, team1_id, team2_id)
+                    win_probability_lr2 = get_team_win_probability(new_models, matches, team2_id, team1_id)
+                    #print(f"team1_id predict = {win_probability_lr1}")
+                    #print(f"team2_id predict = {win_probability_lr2}")
+                    # Получение вероятностей
+                    probabilities = [win_probability_lr1, win_probability_lr2]
                     
-                match_results.append({
-                    'ID team': team1_id,
-                    'ID opponent': team2_id,
-                    'division': division,
-                    '% team': normalized_probs[0] * 100,
-                    '% opponent': normalized_probs[1] * 100
-                })
+                    # Нормализация вероятностей
+                    normalized_probs = normalize_probabilities(probabilities)
+                        
+                    match_results.append({
+                        'ID team': team1_id,
+                        'ID opponent': team2_id,
+                        'division': division,
+                        '% team': normalized_probs[0] * 100,
+                        '% opponent': normalized_probs[1] * 100
+                    })
+    except Exception as es:
+        print(es)
     return pd.DataFrame(match_results)
 
 # Функция для вычисления среднего значения наибольших вероятностей для каждого дивизиона
@@ -260,74 +269,75 @@ def calculate_average_highest_probabilities(match_df):
     return division_probabilities
 
 # Генетический алгоритм распределения, работает на данном этапе лучше предыдущих
-def rank_teams(matches, list_team, model_file, num_divisions, min_teams_per_division=3, num_generations=100, population_size=300):
-    #model = joblib.load(model_file)
-    model = model_file
-    # Получение уникальных команд
-    unique_teams = list_team['ID team'].unique()
-    num_teams = len(unique_teams)
-    if num_teams < num_divisions * min_teams_per_division:
-        raise ValueError("Недостаточно команд для распределения по заданному количеству дивизионов")
+# def rank_teams(matches, list_team, model_file, num_divisions, min_teams_per_division=3, num_generations=100, population_size=300):
+#     #model = joblib.load(model_file)
+#     model = model_file
+#     # Получение уникальных команд
+#     unique_teams = list_team['ID team'].unique()
+#     num_teams = len(unique_teams)
+#     if num_teams < num_divisions * min_teams_per_division:
+#         raise ValueError("Недостаточно команд для распределения по заданному количеству дивизионов")
 
-    # Генерация всех возможных матчей
-    all_matches = []
-    for team1 in unique_teams:
-        for team2 in unique_teams:
-            if team1 != team2:
-                win_prob1 = get_team_win_probability(model, matches, team1, team2)
-                win_prob2 = get_team_win_probability(model, matches, team1, team2)
-                probabilities = normalize_probabilities([win_prob1, win_prob2])
-                all_matches.append([team1, team2, probabilities[0] * 100, probabilities[1] * 100])
+#     # Генерация всех возможных матчей
+#     all_matches = []
+#     for team1 in unique_teams:
+#         for team2 in unique_teams:
+#             if team1 != team2:
+#                 win_prob1 = get_team_win_probability(model, matches, team1, team2)
+#                 win_prob2 = get_team_win_probability(model, matches, team1, team2)
+#                 probabilities = normalize_probabilities([win_prob1, win_prob2])
+#                 all_matches.append([team1, team2, probabilities[0] * 100, probabilities[1] * 100])
     
-    matches_df = pd.DataFrame(all_matches, columns=['ID team', 'ID opponent', '%T', '%O'])
-    # Генетический алгоритм
-    creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-    creator.create("Individual", list, fitness=creator.FitnessMin)
+#     matches_df = pd.DataFrame(all_matches, columns=['ID team', 'ID opponent', '%T', '%O'])
+#     # Генетический алгоритм
+#     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+#     creator.create("Individual", list, fitness=creator.FitnessMin)
 
-    toolbox = base.Toolbox()
-    toolbox.register("indices", random.sample, range(num_teams), num_teams)
-    toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.indices)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+#     toolbox = base.Toolbox()
+#     toolbox.register("indices", random.sample, range(num_teams), num_teams)
+#     toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.indices)
+#     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
-    def evaluate(individual):
-        # Разбиваем индивид на дивизионы
-        divisions = [individual[i::num_divisions] for i in range(num_divisions)]
+#     def evaluate(individual):
+#         # Разбиваем индивид на дивизионы
+#         divisions = [individual[i::num_divisions] for i in range(num_divisions)]
         
-        # Проверка на минимальное количество команд в каждом дивизионе
-        if any(len(div) < min_teams_per_division for div in divisions):
-            return float('inf'),
-        # Проверка на уникальность команд
-        flat_list = [item for sublist in divisions for item in sublist]
-        if len(flat_list) != len(set(flat_list)):
-            return float('inf'),
+#         # Проверка на минимальное количество команд в каждом дивизионе
+#         if any(len(div) < min_teams_per_division for div in divisions):
+#             return float('inf'),
+#         # Проверка на уникальность команд
+#         flat_list = [item for sublist in divisions for item in sublist]
+#         if len(flat_list) != len(set(flat_list)):
+#             return float('inf'),
         
-        score = 0
-        for div in divisions:
-            div_teams = unique_teams[div]
-            div_matches = matches_df[(matches_df['ID team'].isin(div_teams)) & (matches_df['ID opponent'].isin(div_teams))]
-            max_probs = div_matches[['%T', '%O']].max(axis=1)
-            score += max_probs.mean()
-        score /= num_divisions
-        return score,
+#         score = 0
+#         for div in divisions:
+#             div_teams = unique_teams[div]
+#             div_matches = matches_df[(matches_df['ID team'].isin(div_teams)) & (matches_df['ID opponent'].isin(div_teams))]
+#             max_probs = div_matches[['%T', '%O']].max(axis=1)
+#             score += max_probs.mean()
+#         score /= num_divisions
+#         return score,
 
-    toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.05)
-    toolbox.register("select", tools.selTournament, tournsize=3)
-    toolbox.register("evaluate", evaluate)
-    population = toolbox.population(n=population_size)
-    algorithms.eaSimple(population, toolbox, cxpb=0.5, mutpb=0.2, ngen=num_generations, verbose=False)
+#     toolbox.register("mate", tools.cxTwoPoint)
+#     toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.05)
+#     toolbox.register("select", tools.selTournament, tournsize=3)
+#     toolbox.register("evaluate", evaluate)
+#     population = toolbox.population(n=population_size)
+#     algorithms.eaSimple(population, toolbox, cxpb=0.5, mutpb=0.2, ngen=num_generations, verbose=False)
 
-    best_ind = tools.selBest(population, 1)[0]
-    divisions = [best_ind[i::num_divisions] for i in range(num_divisions)]
-    final_divisions = []
-    for i, div in enumerate(divisions):
-        for idx in div:
-            final_divisions.append([unique_teams[idx], f'Division {i+1}'])
+#     best_ind = tools.selBest(population, 1)[0]
+#     divisions = [best_ind[i::num_divisions] for i in range(num_divisions)]
+#     final_divisions = []
+#     for i, div in enumerate(divisions):
+#         for idx in div:
+#             final_divisions.append([unique_teams[idx], f'Division {i+1}'])
     
-    final_df = pd.DataFrame(final_divisions, columns=['ID team', 'division'])
+#     final_df = pd.DataFrame(final_divisions, columns=['ID team', 'division'])
     
-    # Сохранение финальной таблицы
-    matches_df.to_csv('data/interim/matches_rangirov.csv', index=False)
-    final_df.to_csv('team_rangirov.csv', index=False)
-    #final_df.to_excel('xlsx.xlsx', index=False, float_format='%.2f')
-    print(f"Количество уникальных команд: {len(final_df)}")
+#     # Сохранение финальной таблицы
+#     matches_df.to_csv('data/interim/matches_rangirov.csv', index=False)
+#     final_df.to_csv('team_rangirov.csv', index=False)
+#     #final_df.to_excel('xlsx.xlsx', index=False, float_format='%.2f')
+#     print(f"Количество уникальных команд: {len(final_df)}")
+
