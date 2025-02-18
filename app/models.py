@@ -4,6 +4,7 @@ from sklearn.preprocessing import MinMaxScaler
 import joblib
 from deap import base, creator, tools, algorithms
 import random
+import sys
 
 # нормализации данных
 def scale_and_select_features(input_file):
@@ -195,9 +196,15 @@ def get_team_win_probabilities(new_models, team_id, matches):
 
 def process_season_data(season):
     game_stats = pd.read_csv("game_stats_one_r.csv")
-    
+
+    min_season_date = game_stats[game_stats['ID season'] == season]['date'].min()
+
     # Фильтрация строк с ID season < заданного значения
-    game_before_season = game_stats[game_stats['ID season'] < season]
+    game_before_season = game_stats[game_stats['date'] < min_season_date]
+
+    if len(game_before_season) < 20:
+        print(f"Нехватает игоровой истории до этого сезона. Игр до: {len(game_before_season)}")
+        sys.exit()
 
     # Фильтрация строк с ID season = заданному значению
     current_season_games = game_stats[game_stats['ID season'] == season]
