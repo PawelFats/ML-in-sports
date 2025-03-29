@@ -78,9 +78,9 @@ def plot_goalk_deviation(players_df, num_players=4, random_state=None):
         
     # Настройка графика
     plt.figure(figsize=(14, 8))
-    plt.title('Отклонение от среднего значения для игроков с amplua 8')
-    plt.xlabel('Игрок')
-    plt.ylabel('Отклонение от среднего значения, %')
+    plt.title('Deviation from the average for players with amplua 8')
+    plt.xlabel('Player')
+    plt.ylabel('Deviation from the average value, %')
     
     # Позиции на оси X
     bar_width = 0.2  # Увеличение ширины столбцов
@@ -128,9 +128,9 @@ def plot_player_deviation (players_df, amplua, player_ids):
 
     # Построение графика
     plt.figure(figsize=(12, 8))
-    plt.title(f'Отклонение от среднего значения для игроков с amplua {amplua}')
-    plt.xlabel('Игрок')
-    plt.ylabel('Отклонение от среднего значения, %')
+    plt.title(f'Deviation from the average for players with amplua {amplua}')
+    plt.xlabel('Player')
+    plt.ylabel('Deviation from the average value, %')
     plt.axhline(0, color='black', linewidth=2)  # Горизонтальная линия через 0
 
     # Строим графики для каждого показателя

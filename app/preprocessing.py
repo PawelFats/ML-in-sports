@@ -1,8 +1,47 @@
 import pandas as pd
 import warnings
 import numpy as np
+import os
+import chardet
 
 warnings.filterwarnings('ignore')
+
+def replace_data(folder_path):
+    for filename in os.listdir(folder_path):
+        if filename.endswith(".csv"):
+            file_path = os.path.join(folder_path, filename)
+            df = pd.read_csv(file_path, sep=";")
+            df.replace(0, np.nan, inplace=True)
+            df.to_csv(file_path, index=False, sep=";")
+
+def re_format_file(folder_path):
+    # Проход по всем файлам в папке
+    for filename in os.listdir(folder_path):
+        if filename.endswith(".csv"):  # Проверяем, что файл CSV
+            file_path = os.path.join(folder_path, filename)
+            
+            # Определяем кодировку
+            with open(file_path, "rb") as f:
+                rawdata = f.read()
+                result = chardet.detect(rawdata)
+                encoding = result["encoding"]
+
+            print(f"Файл: {filename} | Определённая кодировка: {encoding}")
+
+            # Читаем файл с определённой кодировкой и сохраняем в UTF-8
+            if encoding:
+                try:
+                    with open(file_path, "r", encoding=encoding) as f:
+                        content = f.read()
+                    
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    
+                    print(f"✅ {filename} перекодирован в UTF-8")
+                except Exception as e:
+                    print(f"❌ Ошибка при обработке {filename}: {e}")
+            else:
+                print(f"❌ Кодировка {filename} не определена, пропускаем файл.")
 
 #Удаляем те игры, в которых ID team = !2
 def remove_invalid_games(df):
@@ -128,8 +167,10 @@ def remove_inconsistent_games(df):
 
     for (game_id, team_id), group in df.groupby(['ID game', 'ID team']):
         # Формируем множества, исключая нулевые значения в IDp_in_ice
-        unique_in_ice = set(group['IDp_in_ice']) - {0}  
-        unique_out_ice = set(group['IDp_out_ice']) - {0}
+        # Исключаем нулевые и пустые значения
+        unique_in_ice = {x for x in group['IDp_in_ice'] if pd.notna(x) and x != 0}
+        unique_out_ice = {x for x in group['IDp_out_ice'] if pd.notna(x) and x != 0}
+
 
         # Если вратари в этих столбцах разные и их больше одного, игра считается некорректной
         if len(unique_in_ice) > 1 or len(unique_out_ice) > 1 and unique_in_ice != unique_out_ice:
