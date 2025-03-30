@@ -325,7 +325,7 @@ def remove_empty_rows(merged_data):
     print("Результат работы функции remove_empty_rows:")
     print(f"Количество удаленных строк: {num_rows_deleted}", "\n")
 
-    merged_data.to_csv('compile_stats.csv', index=False)
+    merged_data.to_csv('data/targeted/compile_stats.csv', index=False)
 
     return merged_data
 

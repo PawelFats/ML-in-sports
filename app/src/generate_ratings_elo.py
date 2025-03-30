@@ -87,7 +87,7 @@ def crt_game_stats(compile_stats, goalk_df, game_history_df):
     game_stats['ELO_old'] = ''
     game_stats['ELO_O_old'] = ''
     
-    game_stats.to_csv('game_stats_one_r.csv', index=False)
+    game_stats.to_csv('data/targeted/game_stats_one_r.csv', index=False)
 
 
 def calculate_elo(game_stats_file_path, k_factor):
@@ -180,7 +180,7 @@ def find_optimal_k_factor(game_stats, k_range=np.arange(30, 60, 1)):
     # Проход по каждому значению K-фактора
     for k in k_range:
         
-        game_stats = calculate_elo('game_stats_one_r.csv',k)
+        game_stats = calculate_elo('data/targeted/game_stats_one_r.csv',k)
 
         # Инициализация списков для хранения фактических и ожидаемых результатов матчей
         actual_results_team = []
