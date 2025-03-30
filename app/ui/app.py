@@ -1,23 +1,26 @@
 import streamlit as st
-from ui import pages
+from ui import ui_pages  
 
 def main():
     st.set_page_config(page_title="Анализ хоккейной статистики", layout="wide")
+
     st.sidebar.title("Меню")
 
-    # Выбор страницы через селектор
-    page = st.sidebar.selectbox("Выберите раздел:", 
-                                ["Главная", "Статистика", "Рейтинги", "Графики"])
+    # Статичное меню с radio-кнопками
+    page = st.sidebar.radio("Выберите раздел:", 
+                            ["Главная", "Статистика", "Рейтинги", "Графики", "Статистика игроков"])
 
     # Вызов соответствующей функции страницы
     if page == "Главная":
-        pages.home()
+        ui_pages.home()
     elif page == "Статистика":
-        pages.stats()
+        ui_pages.stats()
     elif page == "Рейтинги":
-        pages.rankings()
+        ui_pages.rankings()
     elif page == "Графики":
-        pages.charts()
+        ui_pages.charts()
+    elif page == "Статистика игроков":
+        ui_pages.player_rt()
 
 if __name__ == "__main__":
     main()
