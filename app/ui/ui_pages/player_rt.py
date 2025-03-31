@@ -86,7 +86,7 @@ def plot_goalk_deviation(players_df, player_ids):
     
     return fig
 
-# Загрузка данных (обратите внимание, что пути к файлам нужно скорректировать под вашу систему)
+# Загрузка данных
 @st.cache_data
 def load_data():
     mean_stats_pl = pd.read_csv(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\processed\rating_last_time\mean_stats_pl.csv')
@@ -104,7 +104,7 @@ def player_rt():
                             ("Нападающие/Защитники", "Вратари"))
 
     if player_type == "Нападающие/Защитники":
-        # Выбор амплуа
+
         # Создаем словарь, сопоставляющий название позиции и числовое значение amplua
         player_position_options = {
             "Защитники": 9,
