@@ -146,7 +146,7 @@ def plot_player_ratings(result_df, season_id):
     plt.tight_layout()
     plt.show()
 
-def plot_team_ratings(compile_stats_path, game_history_path, season_id=None, team_ids=None):
+def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     """
     Функция:
     1. Загружает данные из compile_stats.csv и game_history.csv.
@@ -157,18 +157,20 @@ def plot_team_ratings(compile_stats_path, game_history_path, season_id=None, tea
          p_stat = ((stat + coefficient * games) ** 2) / games,
        где коэффициент равен 2/3 для амплуа 9 (защитники) и 1/6 для амплуа 10 (форварды).
     6. Суммирует рейтинги игроков по командам и строит столбчатую диаграмму суммарного рейтинга команд.
-    """
-    # Загружаем таблицу со статистикой игр игроков
-    df_compile = pd.read_csv(compile_stats_path)
-    
+    """    
     # Если указан сезон, фильтруем по нему через историю игр
     if season_id is not None:
-        df_history = pd.read_csv(game_history_path, sep=";")
         df_history_season = df_history[df_history["ID season"] == season_id]
         # Фильтруем статистику, оставляя только игры, присутствующие в истории выбранного сезона
         df = pd.merge(df_compile, df_history_season[["ID", "division"]], left_on="ID game", right_on="ID", how="inner")
     else:
-        df = df_compile.copy()
+        df = pd.merge(
+            df_compile,
+            df_history[["ID", "division"]],
+            left_on="ID game",
+            right_on="ID",
+            how="left"
+        )
     
     # Для каждой команды оставляем одно значение division (например, первое)
     df_team_div = df.groupby('ID team', as_index=False)['division'].first()

@@ -93,7 +93,7 @@ def load_data():
     mean_stats_goalk = pd.read_csv(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\processed\rating_last_time\mean_stats_goalk.csv')
     return mean_stats_pl, mean_stats_goalk
 
-def player_rt():
+def player_rt_intg():
     st.title("Интерактивная визуализация статистики игроков")
 
     # Загрузка данных

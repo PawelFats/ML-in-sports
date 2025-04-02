@@ -1,6 +1,8 @@
 import streamlit as st
 from ui import ui_pages  
 
+#python -m streamlit run ui/app.py
+
 def main():
     st.set_page_config(page_title="Анализ хоккейной статистики", layout="wide")
 
@@ -8,19 +10,21 @@ def main():
 
     # Статичное меню с radio-кнопками
     page = st.sidebar.radio("Выберите раздел:", 
-                            ["Главная", "Статистика", "Рейтинги", "Графики", "Статистика игроков"])
+                            ["Главная", "Таблица с данными за каждую игру", "Акутальные рейтинги команд", "ELO рейтинг команды за все время", "Рейтинг игроков (интегральный метод)", "Рейтинг игроков (совеский метод)"])
 
     # Вызов соответствующей функции страницы
     if page == "Главная":
         ui_pages.home()
-    elif page == "Статистика":
+    elif page == "Таблица с данными за каждую игру":
         ui_pages.stats()
-    elif page == "Рейтинги":
+    elif page == "Акутальные рейтинги команд":
         ui_pages.rankings()
-    elif page == "Графики":
+    elif page == "ELO рейтинг команды за все время":
         ui_pages.charts()
-    elif page == "Статистика игроков":
-        ui_pages.player_rt()
+    elif page == "Рейтинг игроков (интегральный метод)":
+        ui_pages.player_rt_intg()
+    elif page == "Рейтинг игроков (совеский метод)":
+        ui_pages.player_rt_red()
 
 if __name__ == "__main__":
     main()
