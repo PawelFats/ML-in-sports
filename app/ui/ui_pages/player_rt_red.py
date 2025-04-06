@@ -2,10 +2,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
+import seaborn as sns
 
-# --------------------------
-# Загрузка данных
-# --------------------------
 @st.cache_data
 def load_data():
     df_history = pd.read_csv(r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\raw\game_history.csv", sep=";")
@@ -13,9 +11,6 @@ def load_data():
     df_goalk_stats = pd.read_csv(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\goalkeepers_data.csv')
     return df_history, df_compile_stats, df_goalk_stats
 
-# --------------------------
-# Расчёт статистики игроков
-# --------------------------
 def calculate_player_stats(df, output_file=r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\processed\red_method\player_stats.csv"):
     """
     Считает суммарные достижения для каждого игрока за всё время.
@@ -30,7 +25,7 @@ def calculate_player_stats(df, output_file=r"C:\Users\optem\Desktop\Magistracy\�
         shot_on_target=('a shot on target', 'sum'),
         blocked_throws=('blocked throws', 'sum'),
         p_m=('p/m', 'sum'),
-        total_time=('total time on ice', 'sum')
+        #time=('total time on ice', 'sum')
     ).reset_index()
 
     player_stats.to_csv(output_file, index=False)
@@ -117,9 +112,6 @@ def process_season(df_compile, df_history, season_id, player_ids=None,
     
     return df_final
 
-# --------------------------
-# Визуализация
-# --------------------------
 def plot_player_ratings(result_df, season_id):
     """
     Отрисовывает два графика:
@@ -158,8 +150,81 @@ def plot_player_ratings(result_df, season_id):
     ax2.set_ylabel('Количество игр')
     ax2.set_title(f'Количество игр за сезон {season_id}')
     plt.xticks(rotation=45)
+
+    # 3. Тепловая карта показателей
+    fig3, ax3 = plt.subplots(figsize=(14, 10))
+    heatmap_data = result_df.set_index('ID player')[metrics].rename(columns=metric_labels)
+    sns.heatmap(
+        heatmap_data,
+        annot=True,
+        fmt=".1f",
+        cmap="coolwarm",
+        linewidths=0.5,
+        linecolor="white",
+        cbar_kws={'label': 'Рейтинговые очки'},
+        ax=ax3
+    )
+    ax3.set_title(f'Тепловая карта показателей за сезон {season_id}\n', fontsize=16, pad=20)
+    ax3.set_xlabel('Показатели', fontsize=12)
+    ax3.set_ylabel('ID игрока', fontsize=12)
     
-    return fig1, fig2
+    # 4. Группированный бар-чарт по метрикам
+    fig4, ax4 = plt.subplots(figsize=(16, 8))
+    melted_df = result_df.melt(
+        id_vars=['ID player', 'games'], 
+        value_vars=metrics,
+        var_name='Metric',
+        value_name='Value'
+    )
+    melted_df['Metric'] = melted_df['Metric'].map(metric_labels)
+    
+    sns.barplot(
+        x='ID player',
+        y='Value',
+        hue='Metric',
+        data=melted_df,
+        palette=colors,
+        edgecolor='w',
+        ax=ax4
+    )
+    ax4.set_title(f'Распределение показателей по игрокам (сезон {season_id})', fontsize=16)
+    ax4.set_xlabel('ID игрока', fontsize=12)
+    ax4.set_ylabel('Рейтинговые очки', fontsize=12)
+    ax4.tick_params(axis='x', rotation=45)
+    ax4.legend(title='Показатели', bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax4.grid(axis='y', alpha=0.3)
+    
+    # 5. Радарная диаграмма для топ-5 игроков
+    result_df['total_rating'] = result_df[metrics].sum(axis=1)
+    top_players = result_df.nlargest(5, 'total_rating')
+    labels = list(metric_labels.values())
+    num_metrics = len(labels)
+    angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
+    angles += angles[:1]  # Замыкаем круг
+    
+    radar_colors = sns.color_palette("husl", 5)
+    fig5, ax5 = plt.subplots(subplot_kw={'polar': True}, figsize=(10, 10))
+    
+    for i, (_, row) in enumerate(top_players.iterrows()):
+        values = row[metrics].tolist()
+        values += values[:1]
+        ax5.plot(angles, values, color=radar_colors[i], linewidth=2, 
+                 label=f"ID {row['ID player']} (Σ={row['total_rating']:.1f})")
+        ax5.fill(angles, values, color=radar_colors[i], alpha=0.1)
+    
+    ax5.set_theta_offset(np.pi / 2)
+    ax5.set_theta_direction(-1)
+    ax5.set_rlabel_position(30)
+    ax5.set_xticks(angles[:-1])
+    ax5.set_xticklabels(labels, fontsize=10)
+    ax5.tick_params(axis='y', labelsize=8)
+    ax5.set_title('Топ-5 игроков по суммарному рейтингу\n', fontsize=16, pad=40)
+    ax5.legend(loc='upper right', bbox_to_anchor=(1.4, 1.1), fontsize=10, frameon=True, shadow=True)
+    ax5.spines['polar'].set_visible(False)
+    ax5.grid(alpha=0.5, linestyle='--')
+    
+    # Возвращаем все созданные фигуры
+    return fig1, fig2, fig3, fig4, fig5
 
 def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     """
@@ -233,7 +298,6 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     
     return df_team, fig
 
-
 def player_rt_red():
     st.title("Интерактивная визуализация статистики игроков")
     st.sidebar.header("Настройки")
@@ -244,11 +308,6 @@ def player_rt_red():
     # Объединяем данные, чтобы брать только те сезоны, в которых есть игры из compile_stats
     df_merged = pd.merge(df_compile_stats, df_history, left_on="ID game", right_on="ID", how="inner")
     available_seasons = sorted(df_merged["ID season"].unique())
-    
-    # Если требуется, список доступных команд можно получить так:
-    available_teams = sorted(df_compile_stats["ID team"].unique())
-    
-    available_players = sorted(df_compile_stats["ID player"].unique())
     
     action = st.sidebar.selectbox("Выберите действие", 
                                   ["Актуальный рейтинг игроков", "Статистика игроков за сезон", "Визуализация команд"])
@@ -266,22 +325,19 @@ def player_rt_red():
         # и в списке останутся только подходящие сезоны.
         season_id = st.selectbox("Выберите сезон", available_seasons)
         
+        players_in_season = df_merged[df_merged["ID season"] == season_id]["ID player"].unique()
+        available_players = sorted(players_in_season)
+
         players_input = st.multiselect("Введите ID игроков (через запятую) или оставьте пустым", options=available_players, default=available_players[:4])
-        
-        # if players_input:
-        #     try:
-        #         player_ids = [int(pid.strip()) for pid in players_input.split(",") if pid.strip().isdigit()]
-        #     except Exception as e:
-        #         st.error("Ошибка при вводе ID игроков. Убедитесь, что вводите числа через запятую.")
-        #         player_ids = None
-        # else:
-        #     player_ids = None
 
         if st.button("Рассчитать статистику"):
             result_df = process_season(df_compile_stats, df_history, season_id, players_input)
-            fig1, fig2 = plot_player_ratings(result_df, season_id)
+            fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, season_id)
             st.pyplot(fig1)
             st.pyplot(fig2)
+            st.pyplot(fig3)
+            st.pyplot(fig4)
+            st.pyplot(fig5)
             st.dataframe(result_df)
     
     # 3. Визуализация команд
@@ -289,9 +345,12 @@ def player_rt_red():
         st.header("Визуализация рейтингов команд")
         # Сезон можно выбирать аналогичным образом, или оставить пустым для всех сезонов
         season_id = st.selectbox("Выберите сезон (или оставьте пустым)", [""] + available_seasons)
-        season_id = season_id if season_id != "" else None
+        #season_id = season_id if season_id != "" else None
         
-        team_ids = st.multiselect("Выберите команды", available_teams)
+        teams_in_season = df_merged[df_merged["ID season"] == season_id]["ID team"].unique()
+        available_teams = sorted(teams_in_season)
+
+        team_ids = st.multiselect("Выберите команды", available_teams, default=available_teams[:4])
         
         if st.button("Построить график"):
             df_team, fig = plot_team_ratings(df_compile_stats, df_history, season_id, team_ids)

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 def calculate_player_stats(df, output_file=r"data\processed\red_method\player_stats.csv"):
     '''
@@ -16,7 +17,7 @@ def calculate_player_stats(df, output_file=r"data\processed\red_method\player_st
         shot_on_target=('a shot on target', 'sum'),
         blocked_throws=('blocked throws', 'sum'),
         p_m=('p/m', 'sum'),
-        total_time=('total time on ice', 'sum')
+        time=('total time on ice', 'sum')
     ).reset_index()
 
     player_stats.to_csv(output_file, index=False)
@@ -30,7 +31,7 @@ def calculate_points(df, coefficient, amplua):
     '''
     df_filtered = df[df['amplua'] == amplua].copy()
     
-    for col in ['goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']:
+    for col in ['time', 'goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']:
         df_filtered[f'p_{col}'] = ((df_filtered[col] + coefficient * df_filtered['games']) ** 2) / df_filtered['games']
     df_filtered['player_rating'] = df_filtered[['p_goals', 'p_assists', 'p_throws_by', 
                                                 'p_shot_on_target', 'p_blocked_throws', 'p_m']].sum(axis=1)
@@ -50,7 +51,7 @@ def process_and_save(df, output_file=r"data\processed\red_method\player_stats_wi
     # Объединяем результаты
     df_final = pd.concat([df_defenders, df_forwards])
     
-    df_final = df_final.reindex(columns=['ID player', 'amplua', 'games', 'goals', 'p_goals', 'assists', 'p_assists',  'throws_by', 'p_throws_by', 'shot_on_target', 'p_shot_on_target', 
+    df_final = df_final.reindex(columns=['ID player', 'amplua', 'games', 'time', 'p_time', 'goals', 'p_goals', 'assists', 'p_assists',  'throws_by', 'p_throws_by', 'shot_on_target', 'p_shot_on_target', 
                                          'blocked_throws', 'p_blocked_throws', 'p_m', 'p_p_m', 'player_rating'])
 
     df_final.to_csv(output_file, index=False)
@@ -102,12 +103,16 @@ def process_season(compile_stats_path, game_history_path, season_id, player_ids=
 
 def plot_player_ratings(result_df, season_id):
     '''
-    Отрисовывает два графика. 
-    Первый: сумарный рейтинг сегментируя столбец по определнным показателям.
-    Второй: общее кол-во игр для рассматриваемых игрков.
+    Отрисовывает несколько графиков:
+    1. Составной столбчатый график (stacked bar chart) рейтингов по показателям.
+    2. График количества игр.
+    3. Тепловая карта показателей.
+    4. Группированный бар-чарт по метрикам.
+    5. Радарная диаграмма (спайдер-чарт) для топ-5 игроков по суммарному рейтингу.
     '''
     # Словарь для переименования метрик на русский
     metric_labels = {
+        #'p_time': 'время', не учитывае вермя, его нужно перерассчитывать
         'p_goals': 'голы',
         'p_assists': 'ассисты',
         'p_throws_by': 'мимо',
@@ -119,15 +124,14 @@ def plot_player_ratings(result_df, season_id):
     # Приведение ID игрока к строковому типу для корректного отображения на оси X
     players = result_df['ID player'].astype(str)
     metrics = list(metric_labels.keys())
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']#'#e377c2'
     
-    # График 1: Составной столбчатый график (stacked bar chart) с русскими названиями показателей
+    # 1. График: Составной столбчатый график (stacked bar chart) рейтингов
     fig, ax = plt.subplots(figsize=(14,8))
     bottom = np.zeros(len(result_df))
     for i, metric in enumerate(metrics):
         ax.bar(players, result_df[metric], bottom=bottom, color=colors[i], label=metric_labels[metric])
         bottom += result_df[metric].values
-
     ax.set_xlabel('ID игрока', fontsize=12)
     ax.set_ylabel('Рейтинговые очки', fontsize=12)
     ax.set_title('Структура рейтингов по показателям за сезон {}'.format(season_id), fontsize=14)
@@ -135,14 +139,106 @@ def plot_player_ratings(result_df, season_id):
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
-        
-    # График 2: График количества игр
-    fig3, ax3 = plt.subplots(figsize=(14,6))
-    ax3.bar(players, result_df['games'], color='skyblue')
-    ax3.set_xlabel('ID игрока', fontsize=12)
-    ax3.set_ylabel('Количество игр', fontsize=12)
-    ax3.set_title('Количество игр за сезон {}'.format(season_id), fontsize=14)
+    
+    # 2. График: Количество игр
+    fig2, ax2 = plt.subplots(figsize=(14,6))
+    ax2.bar(players, result_df['games'], color='skyblue')
+    ax2.set_xlabel('ID игрока', fontsize=12)
+    ax2.set_ylabel('Количество игр', fontsize=12)
+    ax2.set_title('Количество игр за сезон {}'.format(season_id), fontsize=14)
     plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+    # 3. Тепловая карта показателей
+    plt.figure(figsize=(14, 10))
+    heatmap_data = result_df.set_index('ID player')[metrics].rename(columns=metric_labels)
+    sns.heatmap(
+        heatmap_data, 
+        annot=True, 
+        fmt=".1f", 
+        cmap="coolwarm", 
+        linewidths=0.5, 
+        linecolor="white",
+        cbar_kws={'label': 'Рейтинговые очки'}
+    )
+    plt.title(f'Тепловая карта показателей за сезон {season_id}\n', fontsize=16, pad=20)
+    plt.xlabel('Показатели', fontsize=12)
+    plt.ylabel('ID игрока', fontsize=12)
+    plt.xticks(ha='center')
+    plt.yticks(rotation=0)
+    plt.tight_layout()
+    plt.show()
+
+    # 4. Группированный бар-чарт по метрикам
+    plt.figure(figsize=(16, 8))
+    melted_df = result_df.melt(
+        id_vars=['ID player', 'games'], 
+        value_vars=metrics,
+        var_name='Metric',
+        value_name='Value'
+    )
+    melted_df['Metric'] = melted_df['Metric'].map(metric_labels)
+    
+    sns.barplot(
+        x='ID player', 
+        y='Value', 
+        hue='Metric', 
+        data=melted_df, 
+        palette=colors,
+        edgecolor='w'
+    )
+    plt.title(f'Распределение показателей по игрокам (сезон {season_id})', fontsize=16)
+    plt.xlabel('ID игрока', fontsize=12)
+    plt.ylabel('Рейтинговые очки', fontsize=12)
+    plt.xticks(rotation=45)
+    plt.legend(title='Показатели', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+    # 5. Радарная диаграмма для топ-5 игроков
+    # Вычисляем суммарный рейтинг
+    #result_df['total_rating'] = result_df[metrics].sum(axis=1)
+    top_players = result_df.nlargest(5, 'player_rating')
+    
+    # Подготовка данных
+    labels = list(metric_labels.values())
+    num_metrics = len(labels)
+    angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
+    angles += angles[:1]  # Замыкаем круг
+    
+    # Стиль
+    radar_colors = sns.color_palette("husl", 5)
+    plt.figure(figsize=(10, 10))
+    ax = plt.subplot(111, polar=True)
+    
+    # Для каждого игрока
+    for i, (_, row) in enumerate(top_players.iterrows()):
+        values = row[metrics].tolist()
+        values += values[:1]
+        ax.plot(angles, values, color=radar_colors[i], linewidth=2, 
+                label=f"ID {row['ID player']} (Σ={row['player_rating']:.1f})")
+        ax.fill(angles, values, color=radar_colors[i], alpha=0.1)
+    
+    # Настройка визуала
+    ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.set_rlabel_position(30)
+    plt.xticks(angles[:-1], labels, fontsize=10)
+    plt.yticks(fontsize=8)
+    plt.title('Топ-5 игроков по суммарному рейтингу\n', fontsize=16, pad=40)
+    plt.legend(
+        loc='upper right', 
+        bbox_to_anchor=(1.4, 1.1),
+        fontsize=10,
+        frameon=True,
+        shadow=True
+    )
+    
+    # Линии сетки
+    ax.spines['polar'].set_visible(False)
+    ax.grid(alpha=0.5, linestyle='--')
     plt.tight_layout()
     plt.show()
 
