@@ -131,16 +131,23 @@ def plot_player_ratings(result_df, season_id):
     metrics = list(metric_labels.keys())
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
     
-    # График 1: составной столбчатый график
+    
+    # 1. График: Составной столбчатый график (stacked bar chart) рейтингов в процентах
+    # Рассчитываем процентное соотношение каждого показателя
+    result_df_percent = result_df.copy()
+
+    for metric in metrics:
+        result_df_percent[metric] = (result_df_percent[metric] / result_df_percent['player_rating']) * 100
+
     fig1, ax1 = plt.subplots(figsize=(14,8))
-    bottom = np.zeros(len(result_df))
+    bottom = np.zeros(len(result_df_percent))
     for i, metric in enumerate(metrics):
-        ax1.bar(players, result_df[metric], bottom=bottom, color=colors[i], label=metric_labels[metric])
-        bottom += result_df[metric].values
+        ax1.bar(players, result_df_percent[metric], bottom=bottom, color=colors[i], label=metric_labels[metric])
+        bottom += result_df_percent[metric].values
     ax1.set_xlabel('ID игрока')
     ax1.set_ylabel('Рейтинговые очки')
     ax1.set_title(f'Структура рейтингов по показателям за сезон {season_id}')
-    ax1.legend(title='Показатели')
+    ax1.legend(title='Показатели', bbox_to_anchor=(1, 1), loc='upper left')
     plt.xticks(rotation=45)
     
     # График 2: количество игр
@@ -233,12 +240,19 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
       2. При наличии season_id — фильтрует данные по сезону.
       3. При наличии team_ids — оставляет данные только для указанных команд.
       4. Группирует данные по игрокам, рассчитывает рейтинговые очки.
-      5. Группирует по командам и строит столбчатую диаграмму суммарного рейтинга.
+      5. Строит следующие графики:
+           - Столбчатая диаграмма суммарного рейтинга команд.
+           - Составной (stacked) бар-чарт с разбивкой по амплуа (защитники и атакующие).
+           - Диаграмма рассеяния: зависимость суммарного рейтинга от числа уникальных игроков.
+           - Составной (stacked) бар-чарт, где для каждой команды показано процентное соотношение вклада
+             каждого показателя (голы, ассисты, мимо, в створ, блокированные, п/м) в общий рейтинг.
     """
     
+    # Фильтрация данных по сезону
     if season_id is not None:
         df_history_season = df_history[df_history["ID season"] == int(season_id)]
-        df = pd.merge(df_compile, df_history_season[["ID", "division"]], left_on="ID game", right_on="ID", how="inner")
+        df = pd.merge(df_compile, df_history_season[["ID", "division"]], 
+                      left_on="ID game", right_on="ID", how="inner")
     else:
         df = pd.merge(
             df_compile,
@@ -251,9 +265,11 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     # Получаем информацию о дивизионе для команд
     df_team_div = df.groupby('ID team', as_index=False)['division'].first()
     
+    # Фильтрация по выбранным командам, если заданы
     if team_ids is not None and len(team_ids) > 0:
         df = df[df["ID team"].isin(team_ids)]
     
+    # Группировка данных по игрокам для расчёта статистики
     df_grouped = df.groupby(['ID player', 'amplua', 'ID team']).agg(
         games=('ID game', 'nunique'),
         goals=('goals', 'sum'),
@@ -264,39 +280,151 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
         p_m=('p/m', 'sum')
     ).reset_index()
         
+    # Разбиваем данные по амплуа: 9 – защитники, 10 – атакующие
     df_def = df_grouped[df_grouped['amplua'] == 9]
     df_for = df_grouped[df_grouped['amplua'] == 10]
     
+    # Расчёт рейтингов для каждого амплуа
     df_def_calc = calculate_points(df_def, 2/3, 9)
     df_for_calc = calculate_points(df_for, 1/6, 10)
     
+    # Объединяем данные игроков
     df_players = pd.concat([df_def_calc, df_for_calc])
     
+    # Группировка по командам для получения суммарного рейтинга
     df_team = df_players.groupby('ID team').agg(
         team_rating=('player_rating', 'sum')
     ).reset_index()
     
     df_team['team_rating'] = round(df_team['team_rating'], 2)
-    
     df_team = pd.merge(df_team, df_team_div, on='ID team', how='left')
     
-    # Построение графика
-    fig, ax = plt.subplots(figsize=(12, 7))
+    # 1. Столбчатая диаграмма суммарного рейтинга для команд
+    fig_total, ax_total = plt.subplots(figsize=(12, 7))
     team_labels = df_team['ID team'].astype(str) + ' (Div ' + df_team['division'].astype(str) + ')'
-    bars = ax.bar(team_labels, df_team['team_rating'], color='teal')
+    bars = ax_total.bar(team_labels, df_team['team_rating'], color='teal')
     if season_id is not None:
-        ax.set_title(f'Суммарный рейтинг команд в сезоне {season_id}', fontsize=14)
+        ax_total.set_title(f'Суммарный рейтинг команд в сезоне {season_id}', fontsize=14)
     else:
-        ax.set_title('Суммарный рейтинг команд за всё время', fontsize=14)
-    ax.set_xlabel('ID команды', fontsize=12)
-    ax.set_ylabel('Суммарный рейтинг', fontsize=12)
+        ax_total.set_title('Суммарный рейтинг команд за всё время', fontsize=14)
+    ax_total.set_xlabel('ID команды', fontsize=12)
+    ax_total.set_ylabel('Суммарный рейтинг', fontsize=12)
     plt.xticks(rotation=45)
     for bar, team_rating in zip(bars, df_team['team_rating']):
         height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2, height, team_rating, ha='center', va='bottom', fontsize=10)
+        ax_total.text(bar.get_x() + bar.get_width() / 2, height, team_rating,
+                      ha='center', va='bottom', fontsize=10)
     plt.tight_layout()
     
-    return df_team, fig
+    # 2. Составной (stacked) бар-чарт с разбивкой по амплуа
+    # Группируем по командам и амплуа, суммируя рейтинговые очки
+    df_team_amplua = df_players.groupby(['ID team', 'amplua'])['player_rating'].sum().unstack(fill_value=0).reset_index()
+    # Добавляем информацию о дивизионе
+    df_team_amplua = pd.merge(df_team_amplua, df_team_div, on='ID team', how='left')
+    team_labels_stacked = df_team_amplua['ID team'].astype(str) + ' (Div ' + df_team_amplua['division'].astype(str) + ')'
+    
+    fig_stacked, ax_stacked = plt.subplots(figsize=(12, 7))
+    bottom = np.zeros(len(df_team_amplua))
+    # Определяем цвета и подписи для амплуа
+    amplua_colors = {9: 'skyblue', 10: 'salmon'}
+    amplua_labels = {9: 'Защитники', 10: 'Атакующие'}
+    for amplua in [9, 10]:
+        if amplua in df_team_amplua.columns:
+            values = df_team_amplua[amplua]
+            ax_stacked.bar(team_labels_stacked, values, bottom=bottom, 
+                           color=amplua_colors[amplua], label=amplua_labels[amplua])
+            bottom += values.values
+    ax_stacked.set_title('Структура рейтинга по амплуа', fontsize=14)
+    ax_stacked.set_xlabel('Команда', fontsize=12)
+    ax_stacked.set_ylabel('Суммарный рейтинг', fontsize=12)
+    ax_stacked.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    # 3. Диаграмма рассеяния: зависимость количества уникальных игроков от суммарного рейтинга команды
+    # Считаем число уникальных игроков для каждой команды
+    df_team_players = df_players.groupby('ID team')['ID player'].nunique().reset_index(name='num_players')
+    df_scatter = pd.merge(df_team, df_team_players, on='ID team', how='left')
+    
+    fig_scatter, ax_scatter = plt.subplots(figsize=(10, 7))
+    ax_scatter.scatter(df_scatter['team_rating'], df_scatter['num_players'], color='purple', s=100, alpha=0.7)
+    for idx, row in df_scatter.iterrows():
+        ax_scatter.text(row['team_rating'], row['num_players'], str(row['ID team']),
+                        fontsize=9, ha='center', va='bottom')
+    ax_scatter.set_xlabel("Суммарный рейтинг команды", fontsize=12)
+    ax_scatter.set_ylabel("Количество уникальных игроков", fontsize=12)
+    ax_scatter.set_title("Зависимость числа игроков от рейтинга команды", fontsize=14)
+    
+    plt.tight_layout()
+    
+    # 4. Составной бар-чарт с процентным соотношением вклада показателей в общий рейтинг команды
+    # Определяем метрики и их подписи
+    metric_labels = {
+        'p_goals': 'голы',
+        'p_assists': 'ассисты',
+        'p_throws_by': 'мимо',
+        'p_shot_on_target': 'в створ',
+        'p_blocked_throws': 'блокированные',
+        'p_p_m': 'п/м'
+    }
+    metrics = list(metric_labels.keys())
+    
+    # Группируем данные по командам для суммирования метрик
+    df_team_metrics = df_players.groupby('ID team')[metrics].sum().reset_index()
+    # Рассчитываем общую сумму метрик для каждой команды
+    df_team_metrics['total'] = df_team_metrics[metrics].sum(axis=1)
+    # Переводим каждую метрику в проценты от общего рейтинга
+    for metric in metrics:
+        df_team_metrics[metric] = df_team_metrics[metric] / df_team_metrics['total'] * 100
+    
+    # Добавляем информацию о дивизионе
+    df_team_metrics = pd.merge(df_team_metrics, df_team_div, on='ID team', how='left')
+    team_labels_metric = df_team_metrics['ID team'].astype(str) + ' (Div ' + df_team_metrics['division'].astype(str) + ')'
+    
+    fig_metric, ax_metric = plt.subplots(figsize=(12, 7))
+    bottom = np.zeros(len(df_team_metrics))
+    colors_metric = {
+        'p_goals': '#1f77b4',
+        'p_assists': '#ff7f0e',
+        'p_throws_by': '#2ca02c',
+        'p_shot_on_target': '#d62728',
+        'p_blocked_throws': '#9467bd',
+        'p_p_m': '#8c564b'
+    }
+    
+    for metric in metrics:
+        values = df_team_metrics[metric]
+        ax_metric.bar(team_labels_metric, values, bottom=bottom, 
+                      color=colors_metric[metric], label=metric_labels[metric])
+        bottom += values.values
+    ax_metric.set_title("Процентное соотношение показателей в общем рейтинге команды", fontsize=14)
+    ax_metric.set_xlabel("ID команды", fontsize=12)
+    ax_metric.set_ylabel("Процентный вклад", fontsize=12)
+    ax_metric.legend(title='Показатели', bbox_to_anchor=(1, 1), loc='upper left')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    # 7. Радарная диаграмма для топ-5 команд по суммарному рейтингу
+    df_radar = df_players.groupby('ID team')[['goals','assists','throws_by','shot_on_target','blocked_throws','p_m']].sum().reset_index()
+    top_teams = df_radar.nlargest(5, 'goals')  # здесь можно выбрать любую метрику или суммарный рейтинг
+    labels = ['голы', 'ассисты', 'мимо', 'в створ', 'блокированные', 'п/м']
+    num_vars = len(labels)
+    angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+    angles += angles[:1]  # замыкаем круг
+
+    fig_radar, ax_radar = plt.subplots(subplot_kw={'polar': True}, figsize=(10, 10))
+    radar_colors = sns.color_palette("Set2", n_colors=top_teams.shape[0])
+    for i, row in top_teams.iterrows():
+        values = row[['goals','assists','throws_by','shot_on_target','blocked_throws','p_m']].tolist()
+        values += values[:1]
+        ax_radar.plot(angles, values, color=radar_colors[i], linewidth=2, label=f"Команда {row['ID team']}")
+        ax_radar.fill(angles, values, color=radar_colors[i], alpha=0.25)
+    ax_radar.set_thetagrids(np.degrees(angles[:-1]), labels)
+    ax_radar.set_title("Радарная диаграмма для топ-5 команд", fontsize=14)
+    ax_radar.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
+    
+    # Возвращаем таблицу и все созданные графики
+    return df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar
 
 def player_rt_red():
     st.title("Интерактивная визуализация статистики игроков")
@@ -345,7 +473,7 @@ def player_rt_red():
         st.header("Визуализация рейтингов команд")
         # Сезон можно выбирать аналогичным образом, или оставить пустым для всех сезонов
         season_id = st.selectbox("Выберите сезон (или оставьте пустым)", [""] + available_seasons)
-        #season_id = season_id if season_id != "" else None
+        season_id = season_id if season_id != "" else None
         
         teams_in_season = df_merged[df_merged["ID season"] == season_id]["ID team"].unique()
         available_teams = sorted(teams_in_season)
@@ -353,9 +481,11 @@ def player_rt_red():
         team_ids = st.multiselect("Выберите команды", available_teams, default=available_teams[:4])
         
         if st.button("Построить график"):
-            df_team, fig = plot_team_ratings(df_compile_stats, df_history, season_id, team_ids)
-            st.pyplot(fig)
+            df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = plot_team_ratings(df_compile_stats, df_history, season_id, team_ids)
+            st.pyplot(fig_total)
+            st.pyplot(fig_stacked)
+            st.pyplot(fig_scatter)
+            st.pyplot(fig_metric)
+            st.pyplot(fig_radar)
+            
             st.dataframe(df_team)
-
-
-#df_team, fig = plot_team_ratings(df_compile_stats, df_history, season_id, team_ids)

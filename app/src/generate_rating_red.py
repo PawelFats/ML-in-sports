@@ -17,7 +17,7 @@ def calculate_player_stats(df, output_file=r"data\processed\red_method\player_st
         shot_on_target=('a shot on target', 'sum'),
         blocked_throws=('blocked throws', 'sum'),
         p_m=('p/m', 'sum'),
-        time=('total time on ice', 'sum')
+        #time=('total time on ice', 'sum')
     ).reset_index()
 
     player_stats.to_csv(output_file, index=False)
@@ -31,10 +31,10 @@ def calculate_points(df, coefficient, amplua):
     '''
     df_filtered = df[df['amplua'] == amplua].copy()
     
-    for col in ['time', 'goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']:
+    for col in ['goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']:
         df_filtered[f'p_{col}'] = ((df_filtered[col] + coefficient * df_filtered['games']) ** 2) / df_filtered['games']
     df_filtered['player_rating'] = df_filtered[['p_goals', 'p_assists', 'p_throws_by', 
-                                                'p_shot_on_target', 'p_blocked_throws', 'p_m']].sum(axis=1)
+                                                'p_shot_on_target', 'p_blocked_throws', 'p_p_m']].sum(axis=1)
     
     return round(df_filtered, 2)
 
@@ -51,7 +51,7 @@ def process_and_save(df, output_file=r"data\processed\red_method\player_stats_wi
     # Объединяем результаты
     df_final = pd.concat([df_defenders, df_forwards])
     
-    df_final = df_final.reindex(columns=['ID player', 'amplua', 'games', 'time', 'p_time', 'goals', 'p_goals', 'assists', 'p_assists',  'throws_by', 'p_throws_by', 'shot_on_target', 'p_shot_on_target', 
+    df_final = df_final.reindex(columns=['ID player', 'amplua', 'games', 'goals', 'p_goals', 'assists', 'p_assists',  'throws_by', 'p_throws_by', 'shot_on_target', 'p_shot_on_target', 
                                          'blocked_throws', 'p_blocked_throws', 'p_m', 'p_p_m', 'player_rating'])
 
     df_final.to_csv(output_file, index=False)
@@ -125,16 +125,23 @@ def plot_player_ratings(result_df, season_id):
     players = result_df['ID player'].astype(str)
     metrics = list(metric_labels.keys())
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']#'#e377c2'
+
+    # Рассчитываем процентное соотношение каждого показателя
+    result_df_percent = result_df.copy()
+
+    for metric in metrics:
+        result_df_percent[metric] = (result_df_percent[metric] / result_df_percent['player_rating']) * 100
     
-    # 1. График: Составной столбчатый график (stacked bar chart) рейтингов
+    # 1. График: Составной столбчатый график (stacked bar chart) рейтингов в процентах
     fig, ax = plt.subplots(figsize=(14,8))
-    bottom = np.zeros(len(result_df))
+    bottom = np.zeros(len(result_df_percent))
     for i, metric in enumerate(metrics):
-        ax.bar(players, result_df[metric], bottom=bottom, color=colors[i], label=metric_labels[metric])
-        bottom += result_df[metric].values
+        ax.bar(players, result_df_percent[metric], bottom=bottom, color=colors[i], label=metric_labels[metric])
+        bottom += result_df_percent[metric].values
+        
     ax.set_xlabel('ID игрока', fontsize=12)
-    ax.set_ylabel('Рейтинговые очки', fontsize=12)
-    ax.set_title('Структура рейтингов по показателям за сезон {}'.format(season_id), fontsize=14)
+    ax.set_ylabel('Процентное соотношение', fontsize=12)
+    ax.set_title('Структура рейтингов по показателям в процентах за сезон {}'.format(season_id), fontsize=14)
     ax.legend(title='Показатели', fontsize=10)
     plt.xticks(rotation=45)
     plt.tight_layout()
