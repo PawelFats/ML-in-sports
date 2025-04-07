@@ -4,12 +4,51 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import seaborn as sns
 
+METRICS = ['goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']
+P_METRICS = ['p_goals', 'p_assists', 'p_throws_by', 'p_shot_on_target', 'p_blocked_throws', 'p_p_m']
+
 @st.cache_data
 def load_data():
     df_history = pd.read_csv(r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\raw\game_history.csv", sep=";")
     df_compile_stats = pd.read_csv(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\compile_stats.csv')
     df_goalk_stats = pd.read_csv(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\goalkeepers_data.csv')
     return df_history, df_compile_stats, df_goalk_stats
+
+def rename_columns(df):
+    """
+    Переименовывает столбцы датафрейма в соответствии с заданной схемой.
+    
+    Если в датафрейме присутствует один из ключевых столбцов, он будет заменён на
+    соответствующее название на русском языке.
+    
+    Аргументы:
+        df (pandas.DataFrame): Исходный датафрейм с английскими названиями столбцов.
+        
+    Возвращает:
+        pandas.DataFrame: Датафрейм с переименованными столбцами.
+    """
+    mapping = {
+        'ID player': 'ID игрока',
+        'amplua': 'амплуа',
+        'games': 'игры',
+        'goals': 'шайбы',
+        'p_goals': 'о_ш',
+        'assists': 'ассисты',
+        'p_assists': 'о_а',
+        'throws_by': 'броски_мимо',
+        'p_throws_by': 'о_м',
+        'shot_on_target': 'броски_в_створ',
+        'p_shot_on_target': 'о_с',
+        'blocked_throws': 'блок_броски',
+        'p_blocked_throws': 'о_б',
+        'p_m': 'п/м',
+        'p_p_m': 'о_п/м',
+        'player_rating': 'общий_рейтинг'
+    }
+    # Переименовываем столбцы, если они присутствуют в датафрейме
+    df = df.rename(columns=mapping)
+    return df
+
 
 def calculate_player_stats(df, output_file=r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\processed\red_method\player_stats.csv"):
     """
@@ -38,10 +77,9 @@ def calculate_points(df, coefficient, amplua):
     """
     df_filtered = df[df['amplua'] == amplua].copy()
     
-    for col in ['goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']:
+    for col in METRICS:
         df_filtered[f'p_{col}'] = ((df_filtered[col] + coefficient * df_filtered['games']) ** 2) / df_filtered['games']
-    df_filtered['player_rating'] = df_filtered[['p_goals', 'p_assists', 'p_throws_by', 
-                                                 'p_shot_on_target', 'p_blocked_throws', 'p_m']].sum(axis=1)
+    df_filtered['player_rating'] = df_filtered[P_METRICS].sum(axis=1)
     
     return round(df_filtered, 2)
 
@@ -95,6 +133,8 @@ def process_season(df_compile, df_history, season_id, player_ids=None,
     unique_games = df_season['ID game'].nunique()
     unique_teams = df_season['ID team'].nunique()
     unique_players_amplua = df_season.groupby('amplua')['ID player'].nunique()
+    
+    #Сделать, чтобы был выбор конретных защитников и нападающих№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№
     
     st.write(f"Уникальных игр в сезоне: {unique_games}")
     st.write(f"Уникальных команд в сезоне: {unique_teams}")
@@ -202,8 +242,8 @@ def plot_player_ratings(result_df, season_id):
     ax4.grid(axis='y', alpha=0.3)
     
     # 5. Радарная диаграмма для топ-5 игроков
-    result_df['total_rating'] = result_df[metrics].sum(axis=1)
-    top_players = result_df.nlargest(5, 'total_rating')
+    #result_df['total_rating'] = result_df[metrics].sum(axis=1)
+    top_players = result_df.nlargest(5, 'player_rating')
     labels = list(metric_labels.values())
     num_metrics = len(labels)
     angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
@@ -212,11 +252,12 @@ def plot_player_ratings(result_df, season_id):
     radar_colors = sns.color_palette("husl", 5)
     fig5, ax5 = plt.subplots(subplot_kw={'polar': True}, figsize=(10, 10))
     
+    top_players = top_players.reset_index(drop=True)
     for i, (_, row) in enumerate(top_players.iterrows()):
         values = row[metrics].tolist()
         values += values[:1]
         ax5.plot(angles, values, color=radar_colors[i], linewidth=2, 
-                 label=f"ID {row['ID player']} (Σ={row['total_rating']:.1f})")
+                 label=f"ID {row['ID player']} (Σ={row['player_rating']:.1f})")
         ax5.fill(angles, values, color=radar_colors[i], alpha=0.1)
     
     ax5.set_theta_offset(np.pi / 2)
@@ -405,8 +446,8 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     plt.tight_layout()
 
     # 7. Радарная диаграмма для топ-5 команд по суммарному рейтингу
-    df_radar = df_players.groupby('ID team')[['goals','assists','throws_by','shot_on_target','blocked_throws','p_m']].sum().reset_index()
-    top_teams = df_radar.nlargest(5, 'goals')  # здесь можно выбрать любую метрику или суммарный рейтинг
+    df_radar = df_players.groupby('ID team')[['p_goals','p_assists','p_throws_by','p_shot_on_target','p_blocked_throws','p_p_m','player_rating']].sum().reset_index()
+    top_teams = df_radar.nlargest(5, 'player_rating')  # здесь можно выбрать любую метрику или суммарный рейтинг
     labels = ['голы', 'ассисты', 'мимо', 'в створ', 'блокированные', 'п/м']
     num_vars = len(labels)
     angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
@@ -414,10 +455,12 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
 
     fig_radar, ax_radar = plt.subplots(subplot_kw={'polar': True}, figsize=(10, 10))
     radar_colors = sns.color_palette("Set2", n_colors=top_teams.shape[0])
+    top_teams = top_teams.reset_index(drop=True)
+
     for i, row in top_teams.iterrows():
-        values = row[['goals','assists','throws_by','shot_on_target','blocked_throws','p_m']].tolist()
+        values = row[P_METRICS].tolist()
         values += values[:1]
-        ax_radar.plot(angles, values, color=radar_colors[i], linewidth=2, label=f"Команда {row['ID team']}")
+        ax_radar.plot(angles, values, color=radar_colors[i], linewidth=2, label=f"Команда ID {row['ID team']} ({round(row['player_rating'], 2)})")
         ax_radar.fill(angles, values, color=radar_colors[i], alpha=0.25)
     ax_radar.set_thetagrids(np.degrees(angles[:-1]), labels)
     ax_radar.set_title("Радарная диаграмма для топ-5 команд", fontsize=14)
@@ -444,6 +487,7 @@ def player_rt_red():
     if action == "Актуальный рейтинг игроков":
         st.header("Актуальный рейтинг игроков")
         stats = process_and_save(df_compile_stats)
+        stats = rename_columns(stats)
         st.dataframe(stats)
     
     # 2. Статистика за сезон
@@ -453,7 +497,9 @@ def player_rt_red():
         # и в списке останутся только подходящие сезоны.
         season_id = st.selectbox("Выберите сезон", available_seasons)
         
+        df_merged = df_merged[df_merged["amplua"] != 8]
         players_in_season = df_merged[df_merged["ID season"] == season_id]["ID player"].unique()
+       
         available_players = sorted(players_in_season)
 
         players_input = st.multiselect("Введите ID игроков (через запятую) или оставьте пустым", options=available_players, default=available_players[:4])
@@ -466,6 +512,7 @@ def player_rt_red():
             st.pyplot(fig3)
             st.pyplot(fig4)
             st.pyplot(fig5)
+            result_df = rename_columns(result_df)
             st.dataframe(result_df)
     
     # 3. Визуализация команд
