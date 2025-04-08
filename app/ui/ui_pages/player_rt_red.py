@@ -497,12 +497,22 @@ def player_rt_red():
         # и в списке останутся только подходящие сезоны.
         season_id = st.selectbox("Выберите сезон", available_seasons)
         
-        df_merged = df_merged[df_merged["amplua"] != 8]
-        players_in_season = df_merged[df_merged["ID season"] == season_id]["ID player"].unique()
-       
-        available_players = sorted(players_in_season)
+        # Фильтруем DataFrame по сезону и исключаем amplua равное 8
+        df_filtered = df_merged[(df_merged["ID season"] == season_id) & (df_merged["amplua"] != 8)]
 
-        players_input = st.multiselect("Введите ID игроков (через запятую) или оставьте пустым", options=available_players, default=available_players[:4])
+        # Получаем уникальные идентификаторы для защитников (amplua == 9)
+        players_9 = df_filtered[df_filtered["amplua"] == 9]["ID player"].unique()
+
+        # Получаем уникальные идентификаторы для атакующих (amplua == 10)
+        players_10 = df_filtered[df_filtered["amplua"] == 10]["ID player"].unique()
+
+        st.write("Выберите игроков или оставьте поля пустыми:")
+
+        players_input_9 = st.multiselect("Защитники", options=players_9, default=players_9[:2])
+        players_input_10 = st.multiselect("Атакующие", options=players_10, default=players_10[:2])
+
+        # Объединяем выбранные идентификаторы игроков
+        players_input = list(players_input_9) + list(players_input_10)
 
         if st.button("Рассчитать статистику"):
             result_df = process_season(df_compile_stats, df_history, season_id, players_input)
@@ -534,5 +544,12 @@ def player_rt_red():
             st.pyplot(fig_scatter)
             st.pyplot(fig_metric)
             st.pyplot(fig_radar)
-            
+            mapping = {
+                'ID team': 'ID команды',
+                'games': 'игры',
+                'team_rating': 'рейтинг',
+                'division': 'дивизион',
+            }
+            # Переименовываем столбцы, если они присутствуют в датафрейме
+            df_team = df_team.rename(columns=mapping)
             st.dataframe(df_team)
