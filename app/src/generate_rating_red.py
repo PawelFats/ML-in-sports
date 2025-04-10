@@ -249,7 +249,7 @@ def plot_player_ratings(result_df, season_id):
     plt.tight_layout()
     plt.show()
 
-def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
+def calc_team_rating(df_compile, df_history, season_id=None, team_ids=None):
     """
     Функция:
     1. Загружает данные из compile_stats.csv и game_history.csv.
@@ -313,7 +313,13 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     # Объединяем итоговую таблицу команд с информацией о дивизионе
     df_team = pd.merge(df_team, df_team_div, on='ID team', how='left')
 
-    # Построение графика
+    return df_team
+
+def plot_team_ratings(df_team, season_id):
+    """
+    Функция:
+    Суммирует рейтинги игроков по командам и строит столбчатую диаграмму суммарного рейтинга команд.
+    """    
     plt.figure(figsize=(12, 7))
     bars = plt.bar(df_team['ID team'].astype(str) + ' (Div ' + df_team['division'].astype(str) + ')', df_team['team_rating'], color='teal')
     if season_id is not None:
@@ -330,6 +336,4 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
 
     plt.tight_layout()
     plt.show()
-    
-    return df_team
 

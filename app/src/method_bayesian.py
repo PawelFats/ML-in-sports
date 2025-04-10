@@ -1,5 +1,9 @@
 import pandas as pd
 
+import sys
+sys.path.append(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\app\src')
+from generate_rating_red import *
+
 def invert_result(result):
     """
     Если результат записан для первой команды, то для второй команды он инвертируется:
@@ -137,6 +141,17 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     
     Функция возвращает словарь с рассчитанными вероятностями и дополнительной информацией.
     """
+
+    compile_stats_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\compile_stats.csv"
+    game_history_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\raw\game_history.csv"
+    df_compile = pd.read_csv(compile_stats_path)
+    df_history = pd.read_csv(game_history_path, sep=";")
+
+    df_rating = calc_team_rating(df_compile, df_history, season_id=None, team_ids=[team_A_id, team_B_id])
+
+    rating_a = df_rating[df_rating["ID team"] == team_A_id]["team_rating"].values[0]
+    rating_b = df_rating[df_rating["ID team"] == team_B_id]["team_rating"].values[0]
+
     # Апариорные вероятности побед (на основе всех игр)
     results_A, games_count_A = get_team_results(df, team_A_id)
     results_B, games_count_B = get_team_results(df, team_B_id)
@@ -174,7 +189,9 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     print(f"B games: {games_count_B}")
     
     return {
+        "team_A_rating": rating_a,
         "team_A_win_prob": round(norm_A, 2),
+        "team_B_rating": rating_b,
         "team_B_win_prob": round(norm_B, 2),
         "overall_probs": {"team_A": p_A_overall, "team_B": p_B_overall},
         "recent_probs": {"team_A": p_A_recent, "team_B": p_B_recent},
