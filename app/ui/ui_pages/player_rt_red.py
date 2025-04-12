@@ -531,8 +531,11 @@ def player_rt_red():
         # Сезон можно выбирать аналогичным образом, или оставить пустым для всех сезонов
         season_id = st.selectbox("Выберите сезон (или оставьте пустым)", [""] + available_seasons)
         season_id = season_id if season_id != "" else None
-        
-        teams_in_season = df_merged[df_merged["ID season"] == season_id]["ID team"].unique()
+
+        if season_id is not None:
+            teams_in_season = df_merged[df_merged["ID season"] == season_id]["ID team"].unique()
+        else:
+            teams_in_season = df_merged["ID team"].unique()
         available_teams = sorted(teams_in_season)
 
         team_ids = st.multiselect("Выберите команды", available_teams, default=available_teams[:4])

@@ -270,12 +270,14 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     print(f"B games: {games_count_B}")
     
     return {
+        "team_A_games_count": games_count_A,
         "team_A_rating": rating_a,
         "team_A_win_prob": round(norm_A, 2),
+        "team_B_games_count": games_count_B,
         "team_B_rating": rating_b,
         "team_B_win_prob": round(norm_B, 2),
-        "overall_probs": {"team_A": p_A_overall, "team_B": p_B_overall},
-        "recent_probs": {"team_A": p_A_recent, "team_B": p_B_recent},
+        "overall_probs": {"team_A": round(p_A_overall, 2), "team_B": round(p_B_overall, 2)},
+        "recent_probs": {"team_A": round(p_A_recent, 2), "team_B": round(p_B_recent, 2)},
         "recent_games_info": {
             "team_A": recent_info_A,
             "team_B": recent_info_B
@@ -290,17 +292,36 @@ def load_game_data():
     return df_games
 
 def bayesian_analysis():
+    # Определяем словарь для переименования столбцов
+    mapping = {
+        "ID game": "ID игры",
+        "ID team": "ID команды",
+        "ID opponent": "ID соперника",
+        "Result_local": "Исход",
+        "date": "Дата"
+    }
     st.title("Баесовский метод прогнозирования исхода матча")
 
-    # Поля ввода: идентификаторы команд и число последних игр
-    team_A_id = st.text_input("Введите ID команды A", value="1")
-    team_B_id = st.text_input("Введите ID команды B", value="2")
-    recent_games = st.number_input("Количество последних игр для анализа", min_value=1, max_value=20, value=5)
+    # Загружаем данные (допустим, используем лишь историю игр)
+    df_game = load_game_data()
+    available_teams = sorted(df_game["ID team"].unique())
 
+    # Поля ввода: идентификаторы команд выбираются из выпадающего списка
+    team_A_id = st.selectbox("Выберите ID команды A", options=available_teams, index=0)
+    team_B_id = st.selectbox("Выберите ID команды B", options=available_teams, index=1)
+
+    recent_games = st.number_input("Количество последних игр для анализа", min_value=1, max_value=60, value=5)
+
+    #Названия команд
+    team_info = pd.read_csv(r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\team_ratings_merge.csv")
+
+    # Определяем названия команд по ID
+    team_A_name_series = team_info.loc[team_info['ID team'] == int(team_A_id), 'TEAM_NAME']
+    team_A_name = team_A_name_series.values[0] if not team_A_name_series.empty else "Неизвестная"
+    team_B_name_series = team_info.loc[team_info['ID team'] == int(team_B_id), 'TEAM_NAME']
+    team_B_name = team_B_name_series.values[0] if not team_B_name_series.empty else "Неизвестная"
+    
     if st.button("Рассчитать вероятности"):
-        # Загружаем данные (допустим, используем лишь историю игр)
-        df_game = load_game_data()
-
         try:
             team_A_id = int(team_A_id)
             team_B_id = int(team_B_id)
@@ -310,6 +331,18 @@ def bayesian_analysis():
 
         result = predict_match_outcome(df_game, team_A_id, team_B_id, recent_games)
         
+        # Преобразуем столбец с датой, чтобы оставить только дату (если это необходимо)
+        team_A_recent = result.get("recent_games_info").get("team_A").copy()
+        if "date" in team_A_recent.columns:
+            team_A_recent["date"] = pd.to_datetime(team_A_recent["date"], errors='coerce').dt.date
+        team_A_recent = team_A_recent.rename(columns=mapping)
+
+        # Аналогично для команды B
+        team_B_recent = result.get("recent_games_info").get("team_B").copy()
+        if "date" in team_B_recent.columns:
+            team_B_recent["date"] = pd.to_datetime(team_B_recent["date"], errors='coerce').dt.date
+        team_B_recent = team_B_recent.rename(columns=mapping)
+
         # Если недостаточно данных для расчета
         if result.get("team_A_win_prob") is None:
             st.error(result.get("message"))
@@ -317,19 +350,21 @@ def bayesian_analysis():
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader(f"Команда A (ID {team_A_id})")
+                st.subheader(f"Команда A ({team_A_name})")
+                st.write(f"Всего игр: {result.get('team_A_games_count')}")
                 st.write(f"Рейтинг: {result.get('team_A_rating')}")
                 st.write(f"Вероятность победы: {result.get('team_A_win_prob')}")
                 st.write("Общие вероятности:", result.get("overall_probs").get("team_A"))
                 st.write("Вероятности последних игр:", result.get("recent_probs").get("team_A"))
                 st.write("Последние игры:")
-                st.dataframe(result.get("recent_games_info").get("team_A"))
+                st.dataframe(team_A_recent.reset_index(drop=True))
                 
             with col2:
-                st.subheader(f"Команда B (ID {team_B_id})")
+                st.subheader(f"Команда B ({team_B_name})")
+                st.write(f"Всего игр: {result.get('team_B_games_count')}")
                 st.write(f"Рейтинг: {result.get('team_B_rating')}")
                 st.write(f"Вероятность победы: {result.get('team_B_win_prob')}")
                 st.write("Общие вероятности:", result.get("overall_probs").get("team_B"))
                 st.write("Вероятности последних игр:", result.get("recent_probs").get("team_B"))
                 st.write("Последние игры:")
-                st.dataframe(result.get("recent_games_info").get("team_B"))
+                st.dataframe(team_B_recent.reset_index(drop=True))
