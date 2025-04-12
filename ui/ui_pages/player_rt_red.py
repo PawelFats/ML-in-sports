@@ -9,9 +9,9 @@ P_METRICS = ['p_goals', 'p_assists', 'p_throws_by', 'p_shot_on_target', 'p_block
 
 @st.cache_data
 def load_data():
-    df_history = pd.read_csv(r"data\raw\game_history.csv", sep=";")
-    df_compile_stats = pd.read_csv(r'data\targeted\compile_stats.csv')
-    df_goalk_stats = pd.read_csv(r'data\targeted\goalkeepers_data.csv')
+    df_history = pd.read_csv(r"data/raw/game_history.csv", sep=";")
+    df_compile_stats = pd.read_csv(r'data/targeted/compile_stats.csv')
+    df_goalk_stats = pd.read_csv(r'data/targeted/goalkeepers_data.csv')
     return df_history, df_compile_stats, df_goalk_stats
 
 def rename_columns(df):
@@ -83,7 +83,7 @@ def calculate_points(df, coefficient, amplua):
     
     return round(df_filtered, 2)
 
-def process_and_save(df, output_file=r"data\processed\red_method\player_stats_with_points.csv"):
+def process_and_save(df, output_file=r"data/processed/red_method/player_stats_with_points.csv"):
     """
     Рассчитывает и сохраняет актуальные рейтинги игроков.
     """
@@ -111,7 +111,7 @@ def process_and_save(df, output_file=r"data\processed\red_method\player_stats_wi
     return df_final
 
 def process_season(df_compile, df_history, season_id, player_ids=None, 
-                   output_file=r"data\processed\red_method\season_player_stats_with_points.csv"):
+                   output_file=r"data/processed/red_method/season_player_stats_with_points.csv"):
     """
     Функция:
       1. Фильтрует игры по сезону (по 'ID season') и, при необходимости, по выбранным игрокам.
