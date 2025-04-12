@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import sys
-sys.path.append(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\app\src')
+sys.path.append(r'app\src')
 
 #from app.src.method_bayesian import predict_match_outcome
 
@@ -223,8 +223,8 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     Функция возвращает словарь с рассчитанными вероятностями и дополнительной информацией.
     """
 
-    compile_stats_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\compile_stats.csv"
-    game_history_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\raw\game_history.csv"
+    compile_stats_path = r"data\targeted\compile_stats.csv"
+    game_history_path = r"data\raw\game_history.csv"
     df_compile = pd.read_csv(compile_stats_path)
     df_history = pd.read_csv(game_history_path, sep=";")
 
@@ -264,11 +264,7 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     # Получаем информацию о последних играх для команды A и команды B
     recent_info_A = get_recent_games_info(df, team_A_id, recent_games)
     recent_info_B = get_recent_games_info(df, team_B_id, recent_games)
-    
-    # Вывод количества игр для отладки
-    print(f"A games: {games_count_A}")
-    print(f"B games: {games_count_B}")
-    
+        
     return {
         "team_A_games_count": games_count_A,
         "team_A_rating": rating_a,
@@ -288,7 +284,7 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
 def load_game_data():
     # Замените пути на актуальные для вашего окружения
     #game_history_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\raw\game_history.csv"
-    df_games = pd.read_csv(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\game_stats_one_r.csv')
+    df_games = pd.read_csv(r'data\targeted\game_stats_one_r.csv')
     return df_games
 
 def bayesian_analysis():
@@ -313,7 +309,7 @@ def bayesian_analysis():
     recent_games = st.number_input("Количество последних игр для анализа", min_value=1, max_value=60, value=5)
 
     #Названия команд
-    team_info = pd.read_csv(r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\team_ratings_merge.csv")
+    team_info = pd.read_csv(r"data\targeted\team_ratings_merge.csv")
 
     # Определяем названия команд по ID
     team_A_name_series = team_info.loc[team_info['ID team'] == int(team_A_id), 'TEAM_NAME']

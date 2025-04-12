@@ -7,7 +7,7 @@ def charts():
     
     # Пример загрузки данных
     try:
-        df = pd.read_csv(r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\game_stats_one_r.csv")
+        df = pd.read_csv(r"data\targeted\game_stats_one_r.csv")
         
         # Преобразуем столбец "date" в формат datetime, затем сортируем
         df["date"] = pd.to_datetime(df["date"])

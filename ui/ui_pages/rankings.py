@@ -6,7 +6,7 @@ def rankings():
     st.write("Здесь будет информация о рейтингах команд.")
     
     # Загрузка данных из CSV
-    csv_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\team_ratings_merge.csv"
+    csv_path = r"data\targeted\team_ratings_merge.csv"
     try:
         df = pd.read_csv(csv_path)
         st.dataframe(df)

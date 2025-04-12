@@ -34,5 +34,9 @@ def main():
     elif page == "Баесовский метод":
         ui_pages.bayesian_analysis()
 
+    st.markdown("---")
+    st.markdown("<p style='text-align: center; color: grey;'>© 2025 Project Author: Pavel Fatyanov, Novosibirsk State Technical University</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: grey;'>Assistance provided by Maxim Bakaev and Elizaveta Ulederkina.</p>", unsafe_allow_html=True)
+
 if __name__ == "__main__":
     main()
