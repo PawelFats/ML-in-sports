@@ -4,3 +4,4 @@
 *.txt
 *.xlsx
 *.png
+data/processed/red_method/*
