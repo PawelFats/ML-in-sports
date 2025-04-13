@@ -89,8 +89,8 @@ def plot_goalk_deviation(players_df, player_ids):
 # Загрузка данных
 @st.cache_data
 def load_data():
-    mean_stats_pl = pd.read_csv(r'data\processed\rating_last_time\mean_stats_pl.csv')
-    mean_stats_goalk = pd.read_csv(r'data\processed\rating_last_time\mean_stats_goalk.csv')
+    mean_stats_pl = pd.read_csv(r'data/processed/rating_last_time/mean_stats_pl.csv')
+    mean_stats_goalk = pd.read_csv(r'data/processed/rating_last_time/mean_stats_goalk.csv')
     return mean_stats_pl, mean_stats_goalk
 
 def player_rt_intg():

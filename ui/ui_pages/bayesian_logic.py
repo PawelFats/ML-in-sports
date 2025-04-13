@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import sys
-sys.path.append(r'app\src')
+sys.path.append(r'app/src')
 
 #from app.src.method_bayesian import predict_match_outcome
 

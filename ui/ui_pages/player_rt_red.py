@@ -50,7 +50,7 @@ def rename_columns(df):
     return df
 
 
-def calculate_player_stats(df, output_file=r"data\processed\red_method\player_stats.csv"):
+def calculate_player_stats(df, output_file=r"data/processed/red_method/player_stats.csv"):
     """
     Считает суммарные достижения для каждого игрока за всё время.
     """
