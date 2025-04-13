@@ -3,5 +3,5 @@
 .ipynb_checkpoints
 *.xlsx
 *.png
-data/processed/red_method/*
-data/ranking_seasons/*
+# data/processed/red_method/*
+# data/ranking_seasons/*

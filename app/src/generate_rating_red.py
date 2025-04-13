@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def calculate_player_stats(df, output_file=r"data\processed\red_method\player_stats.csv"):
+def calculate_player_stats(df, output_file=r"C:/Users/optem/Desktop/Magistracy/Диссертация/ML-in-sports/data/processed/red_method/player_stats.csv"):
     '''
     Считает суммарные достижения для каждого игрока за все время
     '''
@@ -38,7 +38,7 @@ def calculate_points(df, coefficient, amplua):
     
     return round(df_filtered, 2)
 
-def process_and_save(df, output_file=r"data\processed\red_method\player_stats_with_points.csv"):
+def process_and_save(df, output_file=r"C:/Users/optem/Desktop/Magistracy/Диссертация/ML-in-sports/data/processed/red_method/player_stats_with_points.csv"):
     '''
     Рассчитывает и сохраняет актуальные рейтинги игрков.
     '''
