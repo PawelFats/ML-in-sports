@@ -283,7 +283,7 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
 @st.cache_data
 def load_game_data():
     # Замените пути на актуальные для вашего окружения
-    #game_history_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\raw\game_history.csv"
+    #game_history_path = r"C:/Users/optem/Desktop/Magistracy/Диссертация/ML-in-sports/data/raw/game_history.csv"
     df_games = pd.read_csv(r'data/targeted/game_stats_one_r.csv')
     return df_games
 
