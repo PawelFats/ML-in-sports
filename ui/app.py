@@ -1,4 +1,7 @@
 import streamlit as st
+import os
+print("Current working dir:", os.getcwd())
+
 from ui import ui_pages
 
 #python -m streamlit run app/ui/app.py
