@@ -282,9 +282,9 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
 
 @st.cache_data
 def load_game_data():
-    # Замените пути на актуальные для вашего окружения
-    #game_history_path = r"C:/Users/optem/Desktop/Magistracy/Диссертация/ML-in-sports/data/raw/game_history.csv"
     df_games = pd.read_csv(r'data/targeted/game_stats_one_r.csv')
+    #Удаляем игры где была ничья
+    df_games = df_games[df_games["result"] != "D"].copy()
     return df_games
 
 def bayesian_analysis():
@@ -350,8 +350,8 @@ def bayesian_analysis():
                 st.write(f"Всего игр: {result.get('team_A_games_count')}")
                 st.write(f"Рейтинг: {result.get('team_A_rating')}")
                 st.write(f"Вероятность победы: {result.get('team_A_win_prob')}")
-                st.write("Общие вероятности:", result.get("overall_probs").get("team_A"))
-                st.write("Вероятности последних игр:", result.get("recent_probs").get("team_A"))
+                st.write("Вероятность победы за всю историю игр:", result.get("overall_probs").get("team_A"))
+                st.write("Вероятность победы за последние игры:", result.get("recent_probs").get("team_A"))
                 st.write("Последние игры:")
                 st.dataframe(team_A_recent.reset_index(drop=True))
                 
@@ -360,7 +360,7 @@ def bayesian_analysis():
                 st.write(f"Всего игр: {result.get('team_B_games_count')}")
                 st.write(f"Рейтинг: {result.get('team_B_rating')}")
                 st.write(f"Вероятность победы: {result.get('team_B_win_prob')}")
-                st.write("Общие вероятности:", result.get("overall_probs").get("team_B"))
-                st.write("Вероятности последних игр:", result.get("recent_probs").get("team_B"))
+                st.write("Вероятность победы за всю историю игр:", result.get("overall_probs").get("team_B"))
+                st.write("Вероятность победы за последние игры:", result.get("recent_probs").get("team_B"))
                 st.write("Последние игры:")
                 st.dataframe(team_B_recent.reset_index(drop=True))
