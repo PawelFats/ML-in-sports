@@ -9,8 +9,6 @@ if project_root not in sys.path:
 
 from ui import ui_pages
 
-#python -m streamlit run app/ui/app.py
-
 def main():
     st.set_page_config(page_title="Анализ хоккейной статистики", layout="wide")
 
