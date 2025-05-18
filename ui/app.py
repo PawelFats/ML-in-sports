@@ -37,7 +37,7 @@ def main():
         ui_pages.charts()
     elif page == "Рейтинг игроков (интегральный метод)":
         ui_pages.player_rt_intg()
-    elif page == "Рейтинг игроков (совеский метод)":
+    elif page == "Рейтинг игроков (советский метод)":
         ui_pages.player_rt_red()
     elif page == "Байесовский метод":
         ui_pages.bayesian_analysis()
