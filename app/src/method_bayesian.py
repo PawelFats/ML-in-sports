@@ -1,8 +1,84 @@
+import streamlit as st
 import pandas as pd
 
-import sys
-sys.path.append(r'C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\app\src')
-from generate_rating_red import *
+def calculate_points(df, coefficient, amplua):
+    '''
+    Считает очки игрока для каждого показателя учитывая его амплуа.
+    '''
+    df_filtered = df[df['amplua'] == amplua].copy()
+    
+    for col in ['goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']:
+        df_filtered[f'p_{col}'] = ((df_filtered[col] + coefficient * df_filtered['games']) ** 2) / df_filtered['games']
+    df_filtered['player_rating'] = df_filtered[['p_goals', 'p_assists', 'p_throws_by', 
+                                                'p_shot_on_target', 'p_blocked_throws', 'p_p_m']].sum(axis=1)
+    
+    return round(df_filtered, 2)
+
+def calc_team_rating(df_compile, df_history, season_id=None, team_ids=None):
+    """
+    Функция:
+    1. Загружает данные из compile_stats.csv и game_history.csv.
+    2. Если season_id передан, фильтрует игры по сезону.
+    3. Если передан список team_ids, оставляет данные только по указанным командам.
+    4. Группирует данные по 'ID player', 'amplua' и 'ID team', суммируя показатели игр и статистику.
+    5. Рассчитывает рейтинговые очки для каждого игрока по тем же формулам:
+         p_stat = ((stat + coefficient * games) ** 2) / games,
+       где коэффициент равен 2/3 для амплуа 9 (защитники) и 1/6 для амплуа 10 (форварды).
+    6. Суммирует рейтинги игроков по командам и строит столбчатую диаграмму суммарного рейтинга команд.
+    """    
+    # Если указан сезон, фильтруем по нему через историю игр
+    if season_id is not None:
+        df_history_season = df_history[df_history["ID season"] == season_id]
+        # Фильтруем статистику, оставляя только игры, присутствующие в истории выбранного сезона
+        df = pd.merge(df_compile, df_history_season[["ID", "division"]], left_on="ID game", right_on="ID", how="inner")
+    else:
+        df = pd.merge(
+            df_compile,
+            df_history[["ID", "division"]],
+            left_on="ID game",
+            right_on="ID",
+            how="left"
+        )
+    
+    # Для каждой команды оставляем одно значение division (например, первое)
+    df_team_div = df.groupby('ID team', as_index=False)['division'].first()
+
+    # Фильтруем по выбранным командам, если список передан
+    if team_ids is not None and len(team_ids) > 0:
+        df = df[df["ID team"].isin(team_ids)]
+    
+    # Группируем данные по игроку, амплуа и команде (на случай, если игроки выступали за одну команду)
+    df_grouped = df.groupby(['ID player', 'amplua', 'ID team']).agg(
+        games=('ID game', 'nunique'),
+        goals=('goals', 'sum'),
+        assists=('assists', 'sum'),
+        throws_by=('throws by', 'sum'),
+        shot_on_target=('a shot on target', 'sum'),
+        blocked_throws=('blocked throws', 'sum'),
+        p_m=('p/m', 'sum')
+    ).reset_index()
+        
+    # Вычисляем рейтинги для защитников и форвардов с разными коэффициентами
+    df_def = df_grouped[df_grouped['amplua'] == 9]
+    df_for = df_grouped[df_grouped['amplua'] == 10]
+    
+    df_def_calc = calculate_points(df_def, 2/3, 9)
+    df_for_calc = calculate_points(df_for, 1/6, 10)
+    
+    # Объединяем результаты
+    df_players = pd.concat([df_def_calc, df_for_calc])
+    
+    # Группируем по командам, суммируя рейтинги игроков
+    df_team = df_players.groupby('ID team').agg(
+        team_rating=('player_rating', 'sum')
+    ).reset_index()
+    
+    df_team['team_rating'] = round(df_team['team_rating'], 2)
+    
+    # Объединяем итоговую таблицу команд с информацией о дивизионе
+    df_team = pd.merge(df_team, df_team_div, on='ID team', how='left')
+
+    return df_team
 
 def invert_result(result):
     """
@@ -142,8 +218,8 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     Функция возвращает словарь с рассчитанными вероятностями и дополнительной информацией.
     """
 
-    compile_stats_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\compile_stats.csv"
-    game_history_path = r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\raw\game_history.csv"
+    compile_stats_path = r"data/targeted/compile_stats.csv"
+    game_history_path = r"data/raw/game_history.csv"
     df_compile = pd.read_csv(compile_stats_path)
     df_history = pd.read_csv(game_history_path, sep=";")
 
@@ -183,21 +259,103 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     # Получаем информацию о последних играх для команды A и команды B
     recent_info_A = get_recent_games_info(df, team_A_id, recent_games)
     recent_info_B = get_recent_games_info(df, team_B_id, recent_games)
-    
-    # Вывод количества игр для отладки
-    print(f"A games: {games_count_A}")
-    print(f"B games: {games_count_B}")
-    
+        
     return {
+        "team_A_games_count": games_count_A,
         "team_A_rating": rating_a,
         "team_A_win_prob": round(norm_A, 2),
+        "team_B_games_count": games_count_B,
         "team_B_rating": rating_b,
         "team_B_win_prob": round(norm_B, 2),
-        "overall_probs": {"team_A": p_A_overall, "team_B": p_B_overall},
-        "recent_probs": {"team_A": p_A_recent, "team_B": p_B_recent},
+        "overall_probs": {"team_A": round(p_A_overall, 2), "team_B": round(p_B_overall, 2)},
+        "recent_probs": {"team_A": round(p_A_recent, 2), "team_B": round(p_B_recent, 2)},
         "recent_games_info": {
             "team_A": recent_info_A,
             "team_B": recent_info_B
         }
     }
 
+@st.cache_data
+def load_game_data():
+    df_games = pd.read_csv(r'data/targeted/game_stats_one_r.csv')
+    #Удаляем игры где была ничья
+    df_games = df_games[df_games["result"] != "D"].copy()
+    return df_games
+
+def bayesian_analysis():
+    # Определяем словарь для переименования столбцов
+    mapping = {
+        "ID game": "ID игры",
+        "ID team": "ID команды",
+        "ID opponent": "ID соперника",
+        "Result_local": "Исход",
+        "date": "Дата"
+    }
+    st.title("Байесовский метод прогнозирования исхода матча")
+
+    # Загружаем данные (допустим, используем лишь историю игр)
+    df_game = load_game_data()
+    available_teams = sorted(df_game["ID team"].unique())
+
+    # Поля ввода: идентификаторы команд выбираются из выпадающего списка
+    team_A_id = st.selectbox("Выберите ID команды A", options=available_teams, index=0)
+    team_B_id = st.selectbox("Выберите ID команды B", options=available_teams, index=1)
+
+    recent_games = st.number_input("Количество последних игр для анализа", min_value=1, max_value=60, value=5)
+
+    #Названия команд
+    team_info = pd.read_csv(r"data/targeted/team_ratings_merge.csv")
+
+    # Определяем названия команд по ID
+    team_A_name_series = team_info.loc[team_info['ID team'] == int(team_A_id), 'TEAM_NAME']
+    team_A_name = team_A_name_series.values[0] if not team_A_name_series.empty else "Неизвестная"
+    team_B_name_series = team_info.loc[team_info['ID team'] == int(team_B_id), 'TEAM_NAME']
+    team_B_name = team_B_name_series.values[0] if not team_B_name_series.empty else "Неизвестная"
+    
+    if st.button("Рассчитать вероятности"):
+        try:
+            team_A_id = int(team_A_id)
+            team_B_id = int(team_B_id)
+        except ValueError:
+            st.error("Пожалуйста, введите числовые значения для ID команд.")
+            return
+
+        result = predict_match_outcome(df_game, team_A_id, team_B_id, recent_games)
+        
+        # Преобразуем столбец с датой, чтобы оставить только дату (если это необходимо)
+        team_A_recent = result.get("recent_games_info").get("team_A").copy()
+        if "date" in team_A_recent.columns:
+            team_A_recent["date"] = pd.to_datetime(team_A_recent["date"], errors='coerce').dt.date
+        team_A_recent = team_A_recent.rename(columns=mapping)
+
+        # Аналогично для команды B
+        team_B_recent = result.get("recent_games_info").get("team_B").copy()
+        if "date" in team_B_recent.columns:
+            team_B_recent["date"] = pd.to_datetime(team_B_recent["date"], errors='coerce').dt.date
+        team_B_recent = team_B_recent.rename(columns=mapping)
+
+        # Если недостаточно данных для расчета
+        if result.get("team_A_win_prob") is None:
+            st.error(result.get("message"))
+        else:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader(f"Команда A ({team_A_name})")
+                st.write(f"Всего игр: {result.get('team_A_games_count')}")
+                st.write(f"Рейтинг: {result.get('team_A_rating')}")
+                st.write(f"Вероятность победы: {result.get('team_A_win_prob')}")
+                st.write("Вероятность победы за всю историю игр:", result.get("overall_probs").get("team_A"))
+                st.write("Вероятность победы за последние игры:", result.get("recent_probs").get("team_A"))
+                st.write("Последние игры:")
+                st.dataframe(team_A_recent.reset_index(drop=True))
+                
+            with col2:
+                st.subheader(f"Команда B ({team_B_name})")
+                st.write(f"Всего игр: {result.get('team_B_games_count')}")
+                st.write(f"Рейтинг: {result.get('team_B_rating')}")
+                st.write(f"Вероятность победы: {result.get('team_B_win_prob')}")
+                st.write("Вероятность победы за всю историю игр:", result.get("overall_probs").get("team_B"))
+                st.write("Вероятность победы за последние игры:", result.get("recent_probs").get("team_B"))
+                st.write("Последние игры:")
+                st.dataframe(team_B_recent.reset_index(drop=True))
