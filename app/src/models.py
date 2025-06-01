@@ -6,6 +6,8 @@ from deap import base, creator, tools, algorithms
 import random
 import sys
 
+PATH_GAME = '../../data/targeted/game_stats_one_r.csv'
+
 # нормализации данных
 def scale_and_select_features(input_file):
     # Считываем данные из CSV файла
@@ -195,7 +197,7 @@ def get_team_win_probabilities(new_models, team_id, matches):
 
 
 def process_season_data(season):
-    game_stats = pd.read_csv("game_stats_one_r.csv")
+    game_stats = pd.read_csv(r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\game_stats_one_r.csv")
 
     min_season_date = game_stats[game_stats['ID season'] == season]['date'].min()
 

@@ -60,49 +60,64 @@ def calculate_mean_goalk_stats(goalk_data_game):
     
     return goalk_data_game
 
-#РИсует для вратарей
 def plot_goalk_deviation(players_df, num_players=4, random_state=None):
-    # Выбор случайных игроков заданной амплуа
+    # Выбор случайных игроков
     players = players_df.sample(n=num_players, random_state=random_state)
     
-    # Средние значения по всем игрокам для нормализации
-    overall_stats_amplua_8 = players_df.mean()
+    # Средние значения по всем игрокам (без 'ID player')
+    overall_stats = players_df.drop(columns=['ID player'], errors='ignore').mean()
     
-    # Расчет отклонения для выбранных игроков
-    deviation = players.drop(['ID player'], axis=1)
-    deviation = ((deviation - overall_stats_amplua_8) / overall_stats_amplua_8) * 100
+    # Расчет отклонения
+    deviation = players.drop(columns=['ID player'], errors='ignore')
+    deviation = ((deviation - overall_stats) / overall_stats) * 100
 
-    # Умножение столбца MisG на -1
+    # Инвертировать MisG
     if 'MisG' in deviation.columns:
         deviation['MisG'] *= -1
-        
+
     # Настройка графика
     plt.figure(figsize=(14, 8))
-    plt.title('Deviation from the average for players with amplua 8')
-    plt.xlabel('Player')
-    plt.ylabel('Deviation from the average value, %')
-    
-    # Позиции на оси X
-    bar_width = 0.2  # Увеличение ширины столбцов
-    index = np.arange(len(deviation))
-    
-    # Цвета и текстуры для столбцов
-    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'orange']
-    hatches = ['/', '\\', '|', '-', '+', 'x', 'o', 'O', '.', '*']
+    plt.title('Deviation from the average for goalkeepers', fontsize=16)
+    plt.xlabel('Player ID', fontsize=15)
+    plt.ylabel('Deviation (%)', fontsize=15)
 
-    # Построение столбцов для каждого показателя
-    for i, col in enumerate(deviation.columns):
-        if col != 'ID player':
-            plt.bar(index + i * bar_width, deviation[col], bar_width,
-                    color=colors[i % len(colors)], hatch=hatches[i % len(hatches)], label=col)
-    
-    # Добавление подписей и сетки
-    plt.axhline(0, color='black', linewidth=2)  # Горизонтальная линия через 0
-    plt.xticks(index + bar_width * (len(deviation.columns) / 2), players['ID player'])
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize='large')
+    bar_width = 0.2
+    index = np.arange(len(deviation))
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'orange']
+
+    # ---- Вместо старого блока построения (for i, col in …) вставьте это ----
+    # Барчики для каждого игрока, метрики внутри группы идут по возрастанию отклонения
+    bar_width = 0.2
+    index = np.arange(len(deviation))
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'orange']
+    drawn = set()  # чтобы в легенде не дублировались метрики
+
+    for j in range(len(deviation)):
+        # метрики игрока j, отсортированные по его отклонениям
+        sorted_cols = deviation.iloc[j].sort_values().index.tolist()
+
+        for slot, col in enumerate(sorted_cols):
+            plt.bar(
+                index[j] + slot * bar_width,
+                deviation.iloc[j][col],
+                bar_width,
+                color=colors[list(deviation.columns).index(col) % len(colors)],
+                label=col if col not in drawn else ""
+            )
+            drawn.add(col)
+
+    # восстанавливаем горизонтальную линию и подписи
+    plt.axhline(0, color='black', linewidth=2)
+    plt.xticks(
+        index + bar_width * (len(deviation.columns) - 1) / 2,
+        players['ID player'].astype(int)
+    )
+
+    # Легенда — теперь метрики появятся один раз в порядке первого их рисования
+    if drawn:
+        plt.legend(title='Metrics', title_fontsize=15, loc='upper left', bbox_to_anchor=(1, 1), frameon=False, fontsize=14)
+
     plt.grid(True, linestyle='--', alpha=0.7)
-    
-    # Улучшение отображения
     plt.tight_layout()
     plt.show()
 
@@ -128,15 +143,15 @@ def plot_player_deviation (players_df, amplua, player_ids):
 
     # Построение графика
     plt.figure(figsize=(12, 8))
-    plt.title(f'Deviation from the average for players with amplua {amplua}')
-    plt.xlabel('Player')
-    plt.ylabel('Deviation from the average value, %')
+    plt.title(f'Deviation from the average for players with amplua {amplua}', fontsize=16)
+    plt.xlabel('Player', fontsize=15)
+    plt.ylabel('Deviation from the average value, %', fontsize=15)
     plt.axhline(0, color='black', linewidth=2)  # Горизонтальная линия через 0
 
     # Строим графики для каждого показателя
     for col in deviation.columns:
         if col != 'ID player': # Исключаем столбцы ID team и ID player
-            plt.plot(range(len(deviation_sorted)), deviation_sorted[col], marker='o', label=col)
+            plt.plot(range(len(deviation_sorted)), deviation[col], marker='o', label=col)
 
     # Добавляем подписи
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
