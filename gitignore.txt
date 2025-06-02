@@ -6,3 +6,4 @@ __pycache__/
 *.py[cod]
 audit_structure.py
 audit.csv
+__pycache__
