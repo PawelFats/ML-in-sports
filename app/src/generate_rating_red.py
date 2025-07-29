@@ -9,7 +9,7 @@ P_METRICS = ['p_goals', 'p_assists', 'p_throws_by', 'p_shot_on_target', 'p_block
 
 @st.cache_data
 def load_data():
-    df_history = pd.read_csv(r"data/raw/game_history.csv", sep=";")
+    df_history = pd.read_csv(r"data/raw/game_history.csv")
     df_compile_stats = pd.read_csv(r'data/targeted/compile_stats.csv')
     df_goalk_stats = pd.read_csv(r'data/targeted/goalkeepers_data.csv')
     return df_history, df_compile_stats, df_goalk_stats

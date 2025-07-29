@@ -10,9 +10,9 @@ def replace_data(folder_path):
     for filename in os.listdir(folder_path):
         if filename.endswith(".csv"):
             file_path = os.path.join(folder_path, filename)
-            df = pd.read_csv(file_path, sep=";")
+            df = pd.read_csv(file_path)
             df.replace(0, np.nan, inplace=True)
-            df.to_csv(file_path, index=False, sep=";")
+            df.to_csv(file_path, index=False)
 
 def re_format_file(folder_path):
     # Проход по всем файлам в папке
@@ -42,6 +42,38 @@ def re_format_file(folder_path):
                     print(f"❌ Ошибка при обработке {filename}: {e}")
             else:
                 print(f"❌ Кодировка {filename} не определена, пропускаем файл.")
+
+def replace_zero_with_nan(folder_path: str) -> None:
+    """
+    Проходит по всем CSV-файлам в заданной папке и заменяет все значения 0 на NaN.
+
+    Args:
+        folder_path (str): Путь к директории с CSV-файлами.
+
+    Returns:
+        None: Файлы перезаписываются на месте.
+    """
+    # Проверяем, что папка существует
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"Путь {folder_path} не является директорией или не существует")
+
+    # Проходим по каждому файлу в директории
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith('.csv'):
+            continue
+
+        file_path = os.path.join(folder_path, filename)
+        try:
+            # Читаем CSV
+            df = pd.read_csv(file_path)
+            # Заменяем нули на NaN
+            df.replace(0, np.nan, inplace=True)
+            # Сохраняем обратно
+            df.to_csv(file_path, index=False)
+            print(f"Обработан файл: {filename}")
+        except Exception as e:
+            print(f"Ошибка при обработке {filename}: {e}")
+
 
 #Удаляем те игры, в которых ID team = !2
 def remove_invalid_games(df):
@@ -102,7 +134,7 @@ def process_game_data(df_player_game):
         teams_with_info = {
             team_id
             for team_id in group['ID team'].unique()
-            if (group[group['ID team'] == team_id][['pucks', 'a shot on target', 'throws by', 'total time on ice']]
+            if (group[group['ID team'] == team_id][['a shot on target', 'throws by', 'total time on ice']]
                 .notnull().sum(axis=1) > 0).sum() >= 3
         }
         if len(teams_with_info) < 2:
@@ -156,9 +188,6 @@ def check_and_modify_amplua(merged_data):
 
     # Случайное присвоение амплуа 9 или 10
     merged_data.loc[players_to_change.index, 'amplua'] = np.random.choice([9, 10], size=len(players_to_change))
-
-    # Удаление столбца 'pucks'
-    merged_data.drop('pucks', axis=1, inplace=True)
     
     return merged_data
 
@@ -690,7 +719,7 @@ def clean_problem(file_path, output_path):
 
 #Формирование таблицы goalkeeper_stats , на основе нашей таблици compile_stats
 #Создание таблицы goalkeepers и подсчет статитики для вратарей
-def create_goalkeepers_table(compile_stats_path, goals_and_passes_path, output_path):
+def create_goalkeepers_table(compile_stats_path, df_goals_and_passes, output_path):
     # Чтение данных из файла compile_stats
     compile_stats = pd.read_csv(compile_stats_path)
     
@@ -716,7 +745,7 @@ def create_goalkeepers_table(compile_stats_path, goals_and_passes_path, output_p
         goalkeepers_data.loc[len(goalkeepers_data)] = [game_id, team_id, player_id, None, opponent_total_throws]
     
     # Чтение данных из файла goals_and_passes
-    goals_and_passes = pd.read_csv(goals_and_passes_path, sep=";")
+    goals_and_passes = df_goals_and_passes
     
     # Перебираем строки goals_and_passes, чтобы посчитать missed pucks
     for index, row in goalkeepers_data.iterrows():

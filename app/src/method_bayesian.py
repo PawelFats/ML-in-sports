@@ -221,7 +221,7 @@ def predict_match_outcome(df, team_A_id, team_B_id, recent_games=5):
     compile_stats_path = r"data/targeted/compile_stats.csv"
     game_history_path = r"data/raw/game_history.csv"
     df_compile = pd.read_csv(compile_stats_path)
-    df_history = pd.read_csv(game_history_path, sep=";")
+    df_history = pd.read_csv(game_history_path)
 
     df_rating = calc_team_rating(df_compile, df_history, season_id=None, team_ids=[team_A_id, team_B_id])
 
