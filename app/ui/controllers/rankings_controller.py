@@ -4,19 +4,22 @@ from ui.views.rankings_view import RankingsView
 from typing import Dict, Any
 
 class RankingsController(BaseController):
-    """Controller for the team rankings page."""
-    
+    """Контроллер для страницы с рейтингами команд.
+    Отвечает за взаимодействие модели с рейтингами команд и их отображением."""
+
     def __init__(self):
-        self.model = RankingsModel()
-        self.view = RankingsView()
-        super().__init__(self.model, self.view)
+        # Создаем экземпляры модели и представления для рейтингов команд
+        self.model = RankingsModel()    # Модель загружает данные из CSV файла с рейтингами
+        self.view = RankingsView()      # Представление отвечает за отрисовку данных в UI
+        super().__init__(self.model, self.view)  # Передаем их в базовый контроллер
 
     def initialize(self) -> None:
-        """Initialize the rankings page."""
-        data = self.model.get_data()
-        self.view.update(data)
-        self.view.render()
+        """Инициализация страницы рейтингов команд.
+        Получаем данные из модели, обновляем представление и отрисовываем страницу."""
+        data = self.model.get_data()    # Получаем данные из модели (загружаем из файла при необходимости)
+        self.view.update(data)          # Передаем данные в представление
+        self.view.render()              # Отрисовываем интерфейс
 
     def handle_input(self, input_data: Dict[str, Any]) -> None:
-        """Handle user input (not needed for rankings page yet)."""
-        pass 
+        """Обработка пользовательского ввода (пока не используется на этой странице)."""
+        pass

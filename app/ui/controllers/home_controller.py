@@ -4,19 +4,21 @@ from ui.views.home_view import HomeView
 from typing import Dict, Any
 
 class HomeController(BaseController):
-    """Controller for the home page."""
-    
+    """Контроллер для главной страницы (home page).
+    Отвечает за получение данных из модели и передачу их во view."""
+
     def __init__(self):
-        self.model = HomeModel()
-        self.view = HomeView()
-        super().__init__(self.model, self.view)
+        # Создаем экземпляры модели и представления (view)
+        self.model = HomeModel()     # Модель хранит приветственные данные
+        self.view = HomeView()       # Представление отрисовывает приветственный текст
+        super().__init__(self.model, self.view)  # Инициализируем базовый контроллер с моделью и вью
 
     def initialize(self) -> None:
-        """Initialize the home page."""
-        data = self.model.get_data()
-        self.view.update(data)
-        self.view.render()
+        """Инициализация главной страницы."""
+        data = self.model.get_data()  # Получаем данные из модели
+        self.view.update(data)        # Передаем их во view
+        self.view.render()            # Отрисовываем интерфейс
 
     def handle_input(self, input_data: Dict[str, Any]) -> None:
-        """Handle user input (not needed for home page)."""
-        pass 
+        """Обработка пользовательского ввода (на главной странице не требуется)."""
+        pass  # Ввод от пользователя на этой странице не обрабатывается

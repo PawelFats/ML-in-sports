@@ -5,30 +5,33 @@ from typing import Dict, Any
 import streamlit as st
 
 class ChartsController(BaseController):
-    """Controller for the team ELO charts page."""
-    
+    """Контроллер для страницы с графиками ELO рейтингов команд."""
+
     def __init__(self):
+        # Создаём модель и представление, затем передаём их базовому контроллеру
         self.model = ChartsModel()
         self.view = ChartsView()
         super().__init__(self.model, self.view)
 
     def initialize(self) -> None:
-        """Initialize the charts page."""
-        self.model.load_data()
+        """Инициализация страницы: загружаем данные, обрабатываем выбранную команду, передаём всё в представление."""
+        self.model.load_data()  # Загружаем данные из CSV
 
-        # Проверим: выбран ли уже team в session_state
+        # Проверим: выбрана ли команда ранее (сохранилась в session_state)
         selected_team = st.session_state.get("selected_team")
 
         if selected_team is not None:
+            # Если да — обновим модель выбранной командой
             self.model.update({"selected_team": selected_team})
 
+        # Получаем текущие данные модели и передаём их в представление
         data = self.model.get_data()
         self.view.update(data)
-        self.view.render()
+        self.view.render()  # Отрисовка представления
 
     def handle_input(self, input_data: Dict[str, Any]) -> None:
-        """Handle team selection."""
-        self.model.update(input_data)
-        data = self.model.get_data()
-        self.view.update(data)
-        self.view.render() 
+        """Обработка пользовательского ввода — выбор команды."""
+        self.model.update(input_data)  # Обновляем модель новыми данными
+        data = self.model.get_data()   # Получаем обновлённое состояние
+        self.view.update(data)        # Передаём обновлённые данные во View
+        self.view.render()            # Отрисовываем View

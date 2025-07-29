@@ -4,19 +4,21 @@ from ui.views.player_rt_red_view import PlayerRtRedView
 from typing import Dict, Any
 
 class PlayerRtRedController(BaseController):
-    """Controller for the player ratings (soviet method) page."""
-    
+    """Контроллер для страницы рейтинга игроков (советский метод).
+    Отвечает за взаимодействие модели и представления, связанных с советским способом оценки."""
+
     def __init__(self):
-        self.model = PlayerRtRedModel()
-        self.view = PlayerRtRedView()
-        super().__init__(self.model, self.view)
+        # Создаем экземпляры модели и представления
+        self.model = PlayerRtRedModel()       # Модель использует функцию player_rt_red() для генерации данных
+        self.view = PlayerRtRedView()         # Представление отображает результат в интерфейсе
+        super().__init__(self.model, self.view)  # Передаём их в базовый контроллер
 
     def initialize(self) -> None:
-        """Initialize the player ratings page."""
-        data = self.model.get_data()
-        self.view.update(data)
-        self.view.render()
+        """Инициализация страницы рейтингов игроков."""
+        data = self.model.get_data()  # Получаем данные из модели
+        self.view.update(data)        # Передаём их в представление
+        self.view.render()            # Отрисовываем страницу
 
     def handle_input(self, input_data: Dict[str, Any]) -> None:
-        """Handle user input (not needed for this page yet)."""
-        pass 
+        """Обработка пользовательского ввода (на текущей странице не требуется)."""
+        pass  # Ввод со стороны пользователя пока не используется

@@ -4,19 +4,21 @@ from ui.views.player_rt_intg_view import PlayerRtIntgView
 from typing import Dict, Any
 
 class PlayerRtIntgController(BaseController):
-    """Controller for the player ratings (integral method) page."""
-    
+    """Контроллер для страницы рейтинга игроков (интегральный метод).
+    Связывает модель, содержащую данные, и представление, отображающее таблицу с рейтингами."""
+
     def __init__(self):
-        self.model = PlayerRtIntgModel()
-        self.view = PlayerRtIntgView()
-        super().__init__(self.model, self.view)
+        # Инициализируем модель и представление для страницы
+        self.model = PlayerRtIntgModel()     # Модель считает рейтинг игроков интегральным методом
+        self.view = PlayerRtIntgView()       # Представление отображает рейтинг
+        super().__init__(self.model, self.view)  # Вызываем конструктор базового контроллера
 
     def initialize(self) -> None:
-        """Initialize the player ratings page."""
-        data = self.model.get_data()
-        self.view.update(data)
-        self.view.render()
+        """Инициализация страницы рейтингов игроков."""
+        data = self.model.get_data()  # Загружаем данные из модели
+        self.view.update(data)        # Обновляем представление
+        self.view.render()            # Отрисовываем интерфейс
 
     def handle_input(self, input_data: Dict[str, Any]) -> None:
-        """Handle user input (not needed for this page yet)."""
-        pass 
+        """Обработка пользовательского ввода (не требуется для этой страницы)."""
+        pass  # Пользовательский ввод на этой странице пока не предусмотрен

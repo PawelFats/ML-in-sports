@@ -1,10 +1,13 @@
-from ui.core.base import BaseModel
-from typing import Dict, Any
+from ui.core.base import BaseModel  # базовый класс для моделей приложения
+from typing import Dict, Any  # аннотации типов
+
 
 class HomeModel(BaseModel):
-    """Model for the home page."""
-    
+    """Модель для главной страницы приложения."""
+
     def __init__(self):
+        # Данные, которые будут отображаться на главной странице:
+        # заголовок, описание приложения и инструкция для пользователя
         self.welcome_data = {
             "title": "Добро пожаловать!",
             "description": "Это приложение для анализа хоккейной статистики.",
@@ -12,9 +15,14 @@ class HomeModel(BaseModel):
         }
 
     def get_data(self) -> Dict[str, str]:
-        """Get the welcome data."""
+        """
+        Возвращает данные приветствия для отображения во View.
+        """
         return self.welcome_data
 
     def update(self, data: Any) -> None:
-        """Update model data (not needed for home page)."""
-        pass 
+        """
+        Метод обновления модели (не используется на главной странице).
+        Реализован пустым, так как нет входных данных от пользователя.
+        """
+        pass

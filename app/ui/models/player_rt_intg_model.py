@@ -1,30 +1,36 @@
-from ui.core.base import BaseModel
-from typing import Any, Optional
-from app.src.generate_ratings_intg import player_rt_intg
-import pandas as pd
+from ui.core.base import BaseModel  # базовый класс для моделей приложения
+from typing import Any, Optional  # аннотации типов
+from app.src.generate_ratings_intg import player_rt_intg  # функция расчёта рейтинга игроков интегральным методом
+import pandas as pd  # библиотека для работы с DataFrame
+
 
 class PlayerRtIntgModel(BaseModel):
-    """Model for the player ratings (integral method) page."""
-    
+    """Модель для страницы рейтинга игроков (интегральный метод)."""
+
     def __init__(self):
+        # Таблица с результатами расчётов рейтинга
         self.data: Optional[pd.DataFrame] = None
+        # Сообщение об ошибке при загрузке или расчёте
         self.error_message: Optional[str] = None
 
     def load_data(self) -> None:
-        """Load player ratings data using the integral method."""
+        """Выполнить расчёт рейтингов игроков интегральным методом."""
         try:
-            # Call the existing player_rt_intg function
+            # Вызов внешней функции, возвращающей DataFrame с рейтингами
             self.data = player_rt_intg()
+            # При успешном выполнении очищаем сообщение об ошибке
             self.error_message = None
         except Exception as e:
+            # В случае ошибки обнуляем данные и сохраняем текст ошибки
             self.data = None
             self.error_message = f"Ошибка загрузки данных: {str(e)}"
 
     def get_data(self) -> dict[str, Any]:
-        """Get the current state of the model."""
+        """Возвращает текущие данные модели для передачи в представление."""
+        # Если данные ещё не загружены, загружаем их
         if self.data is None:
             self.load_data()
-        
+        # Формируем словарь с заголовком, данными и возможным сообщением об ошибке
         return {
             "title": "Рейтинг игроков (интегральный метод)",
             "data": self.data,
@@ -32,5 +38,5 @@ class PlayerRtIntgModel(BaseModel):
         }
 
     def update(self, data: Any) -> None:
-        """Update model data (not needed for this page)."""
-        pass 
+        """Метод обновления модели (не используется для этой страницы)."""
+        pass
