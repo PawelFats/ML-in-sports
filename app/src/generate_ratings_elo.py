@@ -169,67 +169,34 @@ def calculate_mse(expected_results_team, expected_results_opponent, actual_resul
     return mse
 #Функция для нахождения оптимального значения K-фактора.
 def find_optimal_k_factor(game_stats, k_range=np.arange(30, 60, 1)):
-    
-    # Инициализация переменных для хранения оптимального значения K-фактора и минимальной MSE
     optimal_k = None
     min_mse = float('inf')
-    
-    # Создаем список для хранения значений MSE
     mse_values = []
-    
-    # Проход по каждому значению K-фактора
-    for k in k_range:
-        
-        game_stats = calculate_elo('data/targeted/game_stats_one_r.csv',k)
 
-        # Инициализация списков для хранения фактических и ожидаемых результатов матчей
+    for k in k_range:
+        game_stats = calculate_elo('data/targeted/game_stats_one_r.csv', k)
+
         actual_results_team = []
         expected_results_team = []
         actual_results_opponent = []
         expected_results_opponent = []
 
-        # Проход по каждой строке в DataFrame с данными о матчах
         for index, match in game_stats.iterrows():
-            # Получение ID команд и рейтингов
-            game_id = match['ID game']
-            team_id = match['ID team']
-            opponent_id = match['ID opponent']
             result = match['result']
-            ELO = match['ELO']
-            ELO_O = match['ELO_O']
-            E_S = match['E_S']
-            E_S_O = match['E_S_O']
-                
-            # Получение текущих рейтингов команд или их инициализация
-            team_rating = ELO
-            opponent_rating = ELO_O
+            expected_result_team = match['E_S']
+            expected_result_opponent = match['E_S_O']
 
-            # Вычисление ожидаемого результата
-            expected_result_team = E_S
-            expected_result_opponent = E_S_O
-
-            # Добавление ожидаемых результатов в список
             expected_results_team.append(expected_result_team if result == 'W' else (0.5 if result == 'D' else 0))
             expected_results_opponent.append(expected_result_opponent if result == 'L' else (0.5 if result == 'D' else 0))
-                    
-            # Добавление фактических результатов в список
+
             actual_results_team.append(1 if result == 'W' else (0.5 if result == 'D' else 0))
             actual_results_opponent.append(0 if result == 'W' else (0.5 if result == 'D' else 1))
-        
-        # Вычисление MSE для текущего значения K-фактора
+
         mse = calculate_mse(expected_results_team, expected_results_opponent, actual_results_team, actual_results_opponent)
         mse_values.append(mse)
-        # Проверка, является ли текущее значение MSE лучшим
         if mse < min_mse:
             min_mse = mse
             optimal_k = k
-    
-    # Строим график
-    plt.figure(figsize=(10, 6))
-    plt.plot(k_range, mse_values, color='blue')
-    plt.title('The optimal value K')
-    plt.xlabel('K-factor')
-    plt.ylabel('Mean Squared Error')
-    plt.grid(True)
-    plt.show()
+
+    print(f"Оптимальный K-фактор найден: {optimal_k}")
     return optimal_k

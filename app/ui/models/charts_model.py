@@ -2,7 +2,7 @@ import pandas as pd  # библиотека для работы с таблич�
 from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional, List  # аннотации типов
 from pathlib import Path  # для работы с путями файловой системы
-
+from app.src.generate_ratings_elo import *
 
 class ChartsModel(BaseModel):
     """Модель для страницы графиков ELO рейтинга команды."""
@@ -55,6 +55,36 @@ class ChartsModel(BaseModel):
             self.load_data()
         # Фильтруем DataFrame по выбранному team_id
         return None if self.data is None else self.data[self.data["ID team"] == team_id]
+    
+    def recalculate_elo_data(self) -> None:
+        """
+        Полный пересчёт ELO рейтингов с подбором оптимального K-фактора.
+        Загружает исходные данные, создаёт статистику по матчам,
+        подбирает K-фактор, пересчитывает рейтинги и сохраняет результат.
+        """
+        try:
+            compile_stats = pd.read_csv('data/targeted/compile_stats.csv')
+            goalk_df = pd.read_csv('data/targeted/goalkeepers_data.csv')
+            df_game_history = pd.read_csv('data/raw/game_history.csv') 
+
+            # Пересчёт статистики по играм
+            crt_game_stats(compile_stats, goalk_df, df_game_history)
+
+            # Поиск оптимального K-фактора
+            optimal_k = find_optimal_k_factor('data/targeted/game_stats_one_r.csv')
+            
+            # Вычисление рейтингов с найденным K-фактором
+            game_stats = calculate_elo('data/targeted/game_stats_one_r.csv', optimal_k)
+
+            # Сохранение
+            game_stats.to_csv('data/targeted/game_stats_one_r.csv', index=False, float_format='%.2f')
+
+            # Обновляем текущие данные модели
+            self.load_data()
+
+        except Exception as e:
+            self.error_message = f"Ошибка перерасчёта данных: {str(e)}"
+            self.data = None
 
     def get_data(self) -> dict[str, Any]:
         """
