@@ -36,37 +36,40 @@ class ChartsView(BaseView):
         self.error_message = data.get("error_message")
 
     def render(self) -> None:
-        """Отрисовка страницы с выбором команды и графиком её ELO рейтинга по времени."""
-        # Выводим заголовок
+        """Отрисовка страницы с выбором одной или нескольких команд и графиком их ELO рейтинга по времени."""
         st.title(self.title)
 
-        # Если есть ошибка, показываем её и выходим
         if self.error_message:
             st.error(self.error_message)
             return
 
-        # Виджет для выбора команды из списка
-        selected_team = st.selectbox(
-            "Выберите команду:",
+        # Множественный выбор команд
+        selected_teams = st.multiselect(
+            "Выберите одну или несколько команд:",
             self.teams,
-            key="selected_team"
+            default=self.teams[:1],  # по умолчанию первая команда выбрана
+            key="selected_teams"
         )
 
-        # Если данные для выбранной команды существуют и не пусты
-        if self.selected_team_data is not None and not self.selected_team_data.empty:
-            # создаём копию, чтобы не менять оригинал
-            df = self.selected_team_data.copy()
-            # преобразуем столбец 'date' в тип datetime для корректного построения графика
-            df["date"] = pd.to_datetime(df["date"])
-            # строим линейный график ELO по датам
-            fig = px.line(
-                df,
-                x="date",
-                y="ELO",
-                title=f"Рейтинг ELO команды {selected_team} по времени"
-            )
-            # отображаем график в Streamlit
-            st.plotly_chart(fig)
-        # Если DataFrame существует, но пуст
-        elif self.selected_team_data is not None:
-            st.warning("Нет данных для выбранной команды.")
+        if selected_teams:
+            # Фильтруем данные по выбранным командам
+            df_filtered = self.data[self.data['ID team'].isin(selected_teams)].copy()
+
+            if not df_filtered.empty:
+                df_filtered['date'] = pd.to_datetime(df_filtered['date'])
+
+                # Строим график с разделением по команде (цвет линии)
+                fig = px.line(
+                    df_filtered,
+                    x='date',
+                    y='ELO',
+                    color='ID team',  # столбец, по которому будут разные цвета и легенда
+                    title="Рейтинги ELO выбранных команд по времени",
+                    labels={'team_id': 'Команда', 'ELO': 'Рейтинг ELO', 'date': 'Дата'}
+                )
+
+                st.plotly_chart(fig)
+            else:
+                st.warning("Нет данных для выбранных команд.")
+        else:
+            st.info("Выберите хотя бы одну команду.")
