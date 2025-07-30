@@ -152,6 +152,40 @@ def process_season(df_compile, df_history, season_id, player_ids=None,
     
     return df_final
 
+def process_seasons(df_compile, df_history, season_ids=None, player_ids=None,
+                   output_file=r"data/processed/red_method/season_player_stats_with_points.csv"):
+    """
+    Функция:
+      1. Фильтрует игры по списку сезонов и, при необходимости, по выбранным игрокам.
+      2. Выводит дополнительную информацию: число уникальных игр, игроков по амплуа, число команд.
+      3. Суммирует несколько сезонов и вызывает process_and_save.
+    """
+    if season_ids:
+        df_history_season = df_history[df_history["ID season"].isin([int(s) for s in season_ids])]
+    else:
+        df_history_season = df_history.copy()
+
+    df_season = pd.merge(df_compile, df_history_season[["ID"]],
+                         left_on="ID game", right_on="ID", how="inner")
+    
+    if player_ids:
+        player_ids = [int(pid) for pid in player_ids]
+        df_season = df_season[df_season["ID player"].isin(player_ids)]
+
+    unique_games = df_season['ID game'].nunique()
+    unique_teams = df_season['ID team'].nunique()
+    unique_players_amplua = df_season.groupby('amplua')['ID player'].nunique()
+
+    st.write(f"Уникальных игр в выбранных сезонах: {unique_games}")
+    st.write(f"Уникальных команд в выбранных сезонах: {unique_teams}")
+    st.write("Уникальных игроков по амплуа:")
+    for amplua, count in unique_players_amplua.items():
+        label = {8:'Вратари',9:'Защитники',10:'Атакующие'}.get(amplua, amplua)
+        st.write(f"  {label}: {count}")
+    
+    df_final = process_and_save(df_season, output_file=output_file)
+    return df_final
+
 def plot_player_ratings(result_df, season_id):
     """
     Отрисовывает два графика:
@@ -289,28 +323,25 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
              каждого показателя (голы, ассисты, мимо, в створ, блокированные, п/м) в общий рейтинг.
     """
     
-    # Фильтрация данных по сезону
+    # 1. Фильтрация по сезонам
     if season_id is not None:
-        df_history_season = df_history[df_history["ID season"] == int(season_id)]
-        df = pd.merge(df_compile, df_history_season[["ID", "division"]], 
+        # может быть один элемент или список
+        if isinstance(season_id, (list, tuple)):
+            seasons = [int(s) for s in season_id]
+            df_hist = df_history[df_history["ID season"].isin(seasons)]
+        else:
+            df_hist = df_history[df_history["ID season"] == int(season_id)]
+        df = pd.merge(df_compile, df_hist[["ID", "division"]],
                       left_on="ID game", right_on="ID", how="inner")
     else:
-        df = pd.merge(
-            df_compile,
-            df_history[["ID", "division"]],
-            left_on="ID game",
-            right_on="ID",
-            how="left"
-        )
-    
-    # Получаем информацию о дивизионе для команд
-    df_team_div = df.groupby('ID team', as_index=False)['division'].first()
-    
-    # Фильтрация по выбранным командам, если заданы
-    if team_ids is not None and len(team_ids) > 0:
+        df = pd.merge(df_compile, df_history[["ID", "division"]],
+                      left_on="ID game", right_on="ID", how="left")
+
+    # 2. Фильтрация по выбранным командам
+    if team_ids:
         df = df[df["ID team"].isin(team_ids)]
-    
-    # Группировка данных по игрокам для расчёта статистики
+
+    # 3. Группировка по игрокам
     df_grouped = df.groupby(['ID player', 'amplua', 'ID team']).agg(
         games=('ID game', 'nunique'),
         goals=('goals', 'sum'),
@@ -320,25 +351,26 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
         blocked_throws=('blocked throws', 'sum'),
         p_m=('p/m', 'sum')
     ).reset_index()
-        
-    # Разбиваем данные по амплуа: 9 – защитники, 10 – атакующие
-    df_def = df_grouped[df_grouped['amplua'] == 9]
-    df_for = df_grouped[df_grouped['amplua'] == 10]
-    
-    # Расчёт рейтингов для каждого амплуа
-    df_def_calc = calculate_points(df_def, 2/3, 9)
-    df_for_calc = calculate_points(df_for, 1/6, 10)
-    
-    # Объединяем данные игроков
+
+    # Разбиваем по амплуа и рассчитываем очки
+    df_def_calc = calculate_points(df_grouped[df_grouped['amplua'] == 9], 2/3, 9)
+    df_for_calc = calculate_points(df_grouped[df_grouped['amplua'] == 10], 1/6, 10)
     df_players = pd.concat([df_def_calc, df_for_calc])
-    
-    # Группировка по командам для получения суммарного рейтинга
-    df_team = df_players.groupby('ID team').agg(
+
+    # 4. Суммарный рейтинг команд
+    df_team = df_players.groupby('ID team', as_index=False).agg(
         team_rating=('player_rating', 'sum')
-    ).reset_index()
-    
-    df_team['team_rating'] = round(df_team['team_rating'], 2)
-    df_team = pd.merge(df_team, df_team_div, on='ID team', how='left')
+    )
+    df_team['team_rating'] = df_team['team_rating'].round(2)
+    # добавляем дивизион
+    # после исправления: берём для каждой команды первую попавшуюся строку
+    divs = (
+        df
+        .drop_duplicates(subset='ID team')   # теперь ровно по одной строке на команду
+        [['ID team', 'division']]
+    )
+
+    df_team = df_team.merge(divs, on='ID team', how='left')
     
     # 1. Столбчатая диаграмма суммарного рейтинга для команд
     fig_total, ax_total = plt.subplots(figsize=(12, 7))
@@ -361,7 +393,7 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     # Группируем по командам и амплуа, суммируя рейтинговые очки
     df_team_amplua = df_players.groupby(['ID team', 'amplua'])['player_rating'].sum().unstack(fill_value=0).reset_index()
     # Добавляем информацию о дивизионе
-    df_team_amplua = pd.merge(df_team_amplua, df_team_div, on='ID team', how='left')
+    df_team_amplua = pd.merge(df_team_amplua, divs, on='ID team', how='left')
     team_labels_stacked = df_team_amplua['ID team'].astype(str) + ' (Div ' + df_team_amplua['division'].astype(str) + ')'
     
     fig_stacked, ax_stacked = plt.subplots(figsize=(12, 7))
@@ -419,7 +451,7 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
         df_team_metrics[metric] = df_team_metrics[metric] / df_team_metrics['total'] * 100
     
     # Добавляем информацию о дивизионе
-    df_team_metrics = pd.merge(df_team_metrics, df_team_div, on='ID team', how='left')
+    df_team_metrics = pd.merge(df_team_metrics, divs, on='ID team', how='left')
     team_labels_metric = df_team_metrics['ID team'].astype(str) + ' (Div ' + df_team_metrics['division'].astype(str) + ')'
     
     fig_metric, ax_metric = plt.subplots(figsize=(12, 7))
@@ -467,7 +499,7 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     ax_radar.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
     
     # Возвращаем таблицу и все созданные графики
-    return df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar
+    return df_players, df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar
 
 def player_rt_red():
     st.title("Интерактивная визуализация статистики игроков")
@@ -481,7 +513,7 @@ def player_rt_red():
     available_seasons = sorted(df_merged["ID season"].unique())
     
     action = st.sidebar.selectbox("Выберите действие", 
-                                  ["Актуальный рейтинг игроков", "Статистика игроков за сезон", "Визуализация команд"])
+                                  ["Актуальный рейтинг игроков", "Статистика игроков за сезоны", "Визуализация команд"])
     
     # 1. Общая статистика игроков
     if action == "Актуальный рейтинг игроков":
@@ -490,33 +522,30 @@ def player_rt_red():
         stats = rename_columns(stats)
         st.dataframe(stats)
     
-    # 2. Статистика за сезон
-    elif action == "Статистика игроков за сезон":
-        st.header("Статистика игроков за сезон")
-        # Здесь используется только один selectbox – пользователь может набрать нужные символы,
-        # и в списке останутся только подходящие сезоны.
-        season_id = st.selectbox("Выберите сезон", available_seasons)
+    # 2. Статистика за сезоны
+    elif action == "Статистика игроков за сезоны":
+        st.header("Статистика игроков за сезоны")
+        # Мультивыбор сезонов
+        season_ids = st.multiselect("Выберите сезоны", options=available_seasons, default=available_seasons[:2])
         
-        # Фильтруем DataFrame по сезону и исключаем amplua равное 8
-        df_filtered = df_merged[(df_merged["ID season"] == season_id) & (df_merged["amplua"] != 8)]
+        # Фильтруем DataFrame по выбранным сезонам и исключаем amplua == 8
+        df_filtered = df_merged[df_merged["amplua"] != 8]
+        if season_ids:
+            df_filtered = df_filtered[df_filtered["ID season"].isin(season_ids)]
 
-        # Получаем уникальные идентификаторы для защитников (amplua == 9)
+        # Уникальные игроки по амплуа
         players_9 = df_filtered[df_filtered["amplua"] == 9]["ID player"].unique()
-
-        # Получаем уникальные идентификаторы для атакующих (amplua == 10)
         players_10 = df_filtered[df_filtered["amplua"] == 10]["ID player"].unique()
 
         st.write("Выберите игроков или оставьте поля пустыми:")
-
         players_input_9 = st.multiselect("Защитники", options=players_9, default=players_9[:2])
         players_input_10 = st.multiselect("Атакующие", options=players_10, default=players_10[:2])
-
-        # Объединяем выбранные идентификаторы игроков
         players_input = list(players_input_9) + list(players_input_10)
 
         if st.button("Рассчитать статистику"):
-            result_df = process_season(df_compile_stats, df_history, season_id, players_input)
-            fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, season_id)
+            # Обработка нескольких сезонов
+            result_df = process_seasons(df_compile_stats, df_history, season_ids, players_input)
+            fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, ",".join(map(str, season_ids)) or "все сезоны")
             st.pyplot(fig1)
             st.pyplot(fig2)
             st.pyplot(fig3)
@@ -528,31 +557,53 @@ def player_rt_red():
     # 3. Визуализация команд
     elif action == "Визуализация команд":
         st.header("Визуализация рейтингов команд")
-        # Сезон можно выбирать аналогичным образом, или оставить пустым для всех сезонов
-        season_id = st.selectbox("Выберите сезон (или оставьте пустым)", [""] + available_seasons)
-        season_id = season_id if season_id != "" else None
+        # Мультивыбор сезонов (или пусто для всех)
+        season_ids = st.multiselect("Выберите сезоны", options=available_seasons)
 
-        if season_id is not None:
-            teams_in_season = df_merged[df_merged["ID season"] == season_id]["ID team"].unique()
-        else:
-            teams_in_season = df_merged["ID team"].unique()
+        # Список команд в выбранных сезонах
+        df_temp = df_merged.copy()
+        if season_ids:
+            df_temp = df_temp[df_temp["ID season"].isin(season_ids)]
+        teams_in_season = df_temp["ID team"].unique()
         available_teams = sorted(teams_in_season)
 
         team_ids = st.multiselect("Выберите команды", available_teams, default=available_teams[:4])
-        
+        show_roster = st.checkbox("Отобразить состав команд")
+
         if st.button("Построить график"):
-            df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = plot_team_ratings(df_compile_stats, df_history, season_id, team_ids)
+            df_players, df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = \
+                plot_team_ratings(df_compile_stats, df_history, season_ids if season_ids else None, team_ids)
+
             st.pyplot(fig_total)
             st.pyplot(fig_stacked)
             st.pyplot(fig_scatter)
             st.pyplot(fig_metric)
             st.pyplot(fig_radar)
-            mapping = {
-                'ID team': 'ID команды',
-                'games': 'игры',
-                'team_rating': 'рейтинг',
-                'division': 'дивизион',
-            }
-            # Переименовываем столбцы, если они присутствуют в датафрейме
+
+            mapping = {'ID team': 'ID команды', 'team_rating': 'рейтинг', 'division': 'дивизион'}
             df_team = df_team.rename(columns=mapping)
             st.dataframe(df_team)
+
+            st.session_state['last_df_players'] = df_players
+            st.session_state['last_df_team'] = df_team
+            st.session_state['last_team_ids'] = team_ids
+
+            if show_roster:
+                st.subheader("Состав команд и рейтинги игроков")
+                df_players_all = st.session_state['last_df_players']
+                expected_cols = [
+                    'ID игрока', 'амплуа', 'игры', 'шайбы', 'о_ш',
+                    'ассисты', 'о_а', 'броски_мимо', 'о_м',
+                    'броски_в_створ', 'о_с', 'блок_броски',
+                    'о_б', 'п/м', 'о_п/м', 'общий_рейтинг'
+                ]
+                for tid in st.session_state['last_team_ids']:
+                    st.markdown(f"**Команда ID {tid}**")
+                    roster = df_players_all[df_players_all['ID team'] == tid]
+                    if roster.empty:
+                        st.write("Нет данных по игрокам для этой команды.")
+                    else:
+                        roster = rename_columns(roster)
+                        cols = [c for c in expected_cols if c in roster.columns]
+                        st.dataframe(roster[cols], use_container_width=True, height=400,
+                                    key=f"roster_{tid}")
