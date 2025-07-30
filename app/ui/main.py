@@ -4,10 +4,11 @@ import sys
 # Определяем корневую папку проекта и добавляем её в список путей Python,
 # чтобы можно было импортировать модули из корня без относительных импортов
 project_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..')  # Находим папку на уровень выше текущего файла
+    os.path.join(os.path.dirname(__file__), '../..')  # Находим папку на уровень выше текущего файла
 )
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+
 
 # Импортируем основной класс приложения и контроллеры для разных разделов UI
 from ui.core.app import HockeyAnalyticsApp
