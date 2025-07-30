@@ -502,7 +502,6 @@ def plot_team_ratings(df_compile, df_history, season_id=None, team_ids=None):
     return df_players, df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar
 
 def player_rt_red():
-    st.title("Интерактивная визуализация статистики игроков")
     st.sidebar.header("Настройки")
     
     with st.spinner("Загрузка данных..."):
@@ -512,19 +511,21 @@ def player_rt_red():
     df_merged = pd.merge(df_compile_stats, df_history, left_on="ID game", right_on="ID", how="inner")
     available_seasons = sorted(df_merged["ID season"].unique())
     
-    action = st.sidebar.selectbox("Выберите действие", 
-                                  ["Актуальный рейтинг игроков", "Статистика игроков за сезоны", "Визуализация команд"])
+    st.title("Рейтинг игроков (советский метод)")
+    action = st.selectbox(
+        "Выберите действие",
+        ["Актуальный рейтинг игроков", "Сезонная статистика игроков", "Сезонная статистика команд"]
+    )
+
     
     # 1. Общая статистика игроков
     if action == "Актуальный рейтинг игроков":
-        st.header("Актуальный рейтинг игроков")
         stats = process_and_save(df_compile_stats)
         stats = rename_columns(stats)
         st.dataframe(stats)
     
     # 2. Статистика за сезоны
-    elif action == "Статистика игроков за сезоны":
-        st.header("Статистика игроков за сезоны")
+    elif action == "Сезонная статистика игроков":
         # Мультивыбор сезонов
         season_ids = st.multiselect("Выберите сезоны", options=available_seasons, default=available_seasons[:2])
         
@@ -546,17 +547,17 @@ def player_rt_red():
             # Обработка нескольких сезонов
             result_df = process_seasons(df_compile_stats, df_history, season_ids, players_input)
             fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, ",".join(map(str, season_ids)) or "все сезоны")
-            st.pyplot(fig1)
-            st.pyplot(fig2)
-            st.pyplot(fig3)
-            st.pyplot(fig4)
-            st.pyplot(fig5)
+            with st.expander("📉 Графики по показателям", expanded=False):
+                st.pyplot(fig1)
+                st.pyplot(fig2)
+                st.pyplot(fig3)
+                st.pyplot(fig4)
+                st.pyplot(fig5)
             result_df = rename_columns(result_df)
             st.dataframe(result_df)
-    
+
     # 3. Визуализация команд
-    elif action == "Визуализация команд":
-        st.header("Визуализация рейтингов команд")
+    elif action == "Сезонная статистика команд":
         # Мультивыбор сезонов (или пусто для всех)
         season_ids = st.multiselect("Выберите сезоны", options=available_seasons)
 
@@ -573,12 +574,12 @@ def player_rt_red():
         if st.button("Построить график"):
             df_players, df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = \
                 plot_team_ratings(df_compile_stats, df_history, season_ids if season_ids else None, team_ids)
-
-            st.pyplot(fig_total)
-            st.pyplot(fig_stacked)
-            st.pyplot(fig_scatter)
-            st.pyplot(fig_metric)
-            st.pyplot(fig_radar)
+            with st.expander("📉 Графики по показателям", expanded=False):
+                st.pyplot(fig_total)
+                st.pyplot(fig_stacked)
+                st.pyplot(fig_scatter)
+                st.pyplot(fig_metric)
+                st.pyplot(fig_radar)
 
             mapping = {'ID team': 'ID команды', 'team_rating': 'рейтинг', 'division': 'дивизион'}
             df_team = df_team.rename(columns=mapping)
