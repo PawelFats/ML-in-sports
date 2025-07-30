@@ -107,7 +107,7 @@ def process_and_save(df, output_file=r"data/processed/red_method/player_stats_wi
     df_final = df_final[cols]
 
     df_final.to_csv(output_file, index=False)
-    
+
     return df_final
 
 def process_season(df_compile, df_history, season_id, player_ids=None, 

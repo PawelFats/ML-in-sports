@@ -33,10 +33,18 @@ class HockeyAnalyticsApp:
         )
 
     def render_sidebar(self) -> None:
-        """Отрисовка бокового меню с выбором страницы."""
-        st.sidebar.title("Меню")  # заголовок боковой панели
-        # Радио-кнопки для выбора текущей страницы из списка
-        self.current_page = st.sidebar.radio("Выберите раздел:", self.pages)
+        st.sidebar.title("Меню")
+        if st.session_state.get("lock_navigation", False):
+            st.sidebar.warning("⏳ Дождитесь завершения обработки данных")
+
+        # Добавляем disabled
+        self.current_page = st.sidebar.radio(
+            "Выберите раздел:",
+            self.pages,
+            index=self.pages.index(self.current_page),
+            disabled=st.session_state.get("lock_navigation", False),
+        )
+
 
     def render_footer(self) -> None:
         """Отрисовка нижнего колонтитула с информацией об авторах."""
@@ -57,18 +65,23 @@ class HockeyAnalyticsApp:
 
     def run(self) -> None:
         """Запуск приложения: настройка, меню, отрисовка выбранной страницы и футер."""
-        # Настраиваем Streamlit
+        # 1. Настраиваем Streamlit
         self.setup()
-        # Рисуем боковое меню и получаем выбранную страницу
+
+        # 2. Инициализируем флаг блокировки (если ещё нет)
+        if "lock_navigation" not in st.session_state:
+            st.session_state.lock_navigation = False
+
+        # 3. Сначала рисуем сайдбар — он сразу увидит lock_navigation и отобразит либо радио, либо предупреждение
         self.render_sidebar()
-        
-        # Если для выбранной страницы зарегистрирован контроллер, запускаем его
+
+        # 4. Затем запускаем контроллер для выбранной страницы
         if self.current_page in self.controllers:
             controller = self.controllers[self.current_page]
-            controller.initialize()  # инициализация контроллера отображает View
+            controller.initialize()
         else:
-            # В случае отсутствия контроллера — выводим ошибку
             st.error(f"Controller for page '{self.current_page}' not found!")
-        
-        # Рисуем нижний колонтитул
+
+        # 5. И в самом конце — футер
         self.render_footer()
+
