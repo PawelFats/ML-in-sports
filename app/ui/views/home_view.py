@@ -141,8 +141,8 @@ class HomeView(BaseView):
 
             step += 1
             validate_status.info(f"Валидация: шаг {step}/{validation_steps} — фильтрация событий вратарей")
-            goalk_data = remove_inconsistent_games(df_keeper_events)
-            goalk_filt, compile_stats = filter_goalkeeper_event_by_compile_stats(goalk_data, compile_stats)
+            # goalk_data = remove_inconsistent_games(df_keeper_events)
+            goalk_filt, compile_stats = filter_goalkeeper_event_by_compile_stats(df_keeper_events, compile_stats)
             progress_bar.progress(step / validation_steps)
 
             step += 1

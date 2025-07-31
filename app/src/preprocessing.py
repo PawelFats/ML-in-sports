@@ -518,7 +518,7 @@ def filter_goalkeeper_events(compile_stats, goalkeeper_event, output_filtered_pa
     amplua_8_counts = player_counts[8]
     
     # Выбор игр, где количество игроков с амплуа 8 больше двух
-    selected_games = amplua_8_counts[amplua_8_counts != 2]
+    selected_games = amplua_8_counts
     
     # Получение ID игр
     selected_game_ids = selected_games.index.tolist()
@@ -547,17 +547,17 @@ def filter_goalkeeper_events(compile_stats, goalkeeper_event, output_filtered_pa
     games_with_goalkeeper_change = []
     
     # Перебор каждой группы
-    for (game_id, team_id), group in grouped_by_game_team:
-        # Если в группе больше одной записи, значит была замена вратарей
-        if len(group) > 1:
-            # Проверяем, разные ли значения (кроме 0) в колонках IDp_out_ice и IDp_in_ice
-            unique_values_out = group['IDp_out_ice'][group['IDp_out_ice'] != 0].nunique()
-            unique_values_in = group['IDp_in_ice'][group['IDp_in_ice'] != 0].nunique()
-            if (unique_values_out > 0 and unique_values_in > 0) and (unique_values_out != 1 or unique_values_in != 1):
-                games_with_goalkeeper_change.append(game_id)
+    # for (game_id, team_id), group in grouped_by_game_team:
+    #     # Если в группе больше одной записи, значит была замена вратарей
+    #     if len(group) > 1:
+    #         # Проверяем, разные ли значения (кроме 0) в колонках IDp_out_ice и IDp_in_ice
+    #         unique_values_out = group['IDp_out_ice'][group['IDp_out_ice'] != 0].nunique()
+    #         unique_values_in = group['IDp_in_ice'][group['IDp_in_ice'] != 0].nunique()
+    #         if (unique_values_out > 0 and unique_values_in > 0) and (unique_values_out != 1 or unique_values_in != 1):
+    #             games_with_goalkeeper_change.append(game_id)
     
     # Создание DataFrame для сохранения игр с заменой вратарей
-    goalkeeper_change_df = filtered_goalkeeper_event[filtered_goalkeeper_event['ID game'].isin(games_with_goalkeeper_change)]
+    goalkeeper_change_df = filtered_goalkeeper_event[filtered_goalkeeper_event['ID game'].isin(grouped_by_game_team)]
     
     # Сохранение данных о заменах вратарей в CSV файл
     goalkeeper_change_df.to_csv(output_replacements_path, index=False)

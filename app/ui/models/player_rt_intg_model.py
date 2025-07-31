@@ -1,6 +1,6 @@
 from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional  # аннотации типов
-from app.src.generate_ratings_intg import player_rt_intg  # функция расчёта рейтинга игроков интегральным методом
+from app.src.generate_ratings_intg import *  # функция расчёта рейтинга игроков интегральным методом
 import pandas as pd  # библиотека для работы с DataFrame
 
 
@@ -18,6 +18,7 @@ class PlayerRtIntgModel(BaseModel):
         try:
             # Вызов внешней функции, возвращающей DataFrame с рейтингами
             self.data = player_rt_intg()
+
             # При успешном выполнении очищаем сообщение об ошибке
             self.error_message = None
         except Exception as e:

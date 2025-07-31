@@ -289,12 +289,12 @@ def calculate_team_ratings(pl_rating_info_path, output_path):
 #Расчет рейтингов за все игры
 def calculate_ratings(game_stats_file, game_history_file, goalkeepers_file, output_file, team_output_file):
     compile_stats = pd.read_csv(game_stats_file)
-    game_history = pd.read_csv(game_history_file, sep=';')
+    game_history = pd.read_csv(game_history_file)
     goalkeepers_data = pd.read_csv(goalkeepers_file)
 
     # Добавление столбца 'date' в таблицу compile_stats
     compile_stats['date'] = compile_stats['ID game'].map(game_history.set_index('ID')['date'])
-    compile_stats['date'] = pd.to_datetime(compile_stats['date'])
+    #compile_stats['date'] = pd.to_datetime(compile_stats['date'])
 
     # Вызов функции и вывод общих статистик для игроков
     mean_stats_pl = calculate_mean_player_stats(compile_stats)
@@ -620,6 +620,15 @@ def player_rt_intg():
     if st.button("🔁 Перерасчитать рейтинги"):
         with st.spinner("Выполняется перерасчет рейтингов..."):
             try:
+                # #Расчет рейтингов за все игры
+                # calculate_ratings(
+                #     game_stats_file='data/targeted/compile_stats.csv', 
+                #     game_history_file='data/raw/game_history.csv',
+                #     goalkeepers_file='data/targeted/goalkeepers_data.csv', 
+                #     output_file='data/processed/all/final_ratings.csv', 
+                #     team_output_file='data/processed/all/RATING_TEAM_ALL_TIME.csv'
+                #     )
+                
                 # Шаг 1: Пересчитываем статистику вратарей
                 goalk_data_games = pd.read_csv('data/targeted/goalkeepers_data.csv')
                 mean_stats_goalk = calculate_mean_goalk_stats(goalk_data_games)
@@ -629,6 +638,17 @@ def player_rt_intg():
                 compile_stats = pd.read_csv('data/targeted/compile_stats.csv')
                 mean_stats_pl = calculate_mean_player_stats(compile_stats)
                 mean_stats_pl.to_csv('data/processed/rating_last_time/mean_stats_pl.csv', index=False, float_format='%.2f')
+
+                # add_old_ratings_to_teams(
+                #     input_file='data/processed/all/RATING_TEAM_ALL_TIME.csv', 
+                #     output_file='data/processed/all/RATING_TEAM_ALL_TIME_with_old_ratings.csv'
+                # )
+
+                # add_ratings_to_game_stats(
+                #     'data/processed/all/RATING_TEAM_ALL_TIME_with_old_ratings.csv',
+                #     'data/targeted/game_stats_one_r.csv',
+                #     'data/targeted/game_stats_one_r.csv'
+                # )
 
                 st.success("Рейтинги успешно пересчитаны!")
             except Exception as e:
