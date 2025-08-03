@@ -1,5 +1,5 @@
 import pandas as pd  # библиотека для работы с табличными данными
-from app.ui.core.base import BaseModel  # базовый класс для моделей приложения
+from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional  # аннотации типов
 from pathlib import Path  # для работы с файловыми путями
 

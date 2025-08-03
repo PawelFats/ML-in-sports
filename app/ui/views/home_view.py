@@ -1,7 +1,7 @@
 import streamlit as st  # библиотека для создания веб-приложения
-from app.ui.core.base import BaseView  # базовый класс представления
+from ui.core.base import BaseView  # базовый класс представления
 from typing import Any, Dict  # типизация стандартной библиотеки
-from app.ui.models.data_loader import DataLoader
+from ui.models.data_loader import DataLoader
 from app.src.preprocessing import *  # импорт всех необходимых функций валидации и обработки данных
 from datetime import datetime
 

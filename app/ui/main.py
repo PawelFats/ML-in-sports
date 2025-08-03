@@ -11,14 +11,14 @@ if project_root not in sys.path:
 
 
 # Импортируем основной класс приложения и контроллеры для разных разделов UI
-from app.ui.core.app import HockeyAnalyticsApp
-from app.ui.controllers.home_controller import HomeController
-from app.ui.controllers.stats_controller import StatsController
-from app.ui.controllers.rankings_controller import RankingsController
-from app.ui.controllers.charts_controller import ChartsController
-from app.ui.controllers.player_rt_intg_controller import PlayerRtIntgController
-from app.ui.controllers.player_rt_red_controller import PlayerRtRedController
-from app.ui.controllers.bayesian_controller import BayesianController
+from ui.core.app import HockeyAnalyticsApp
+from ui.controllers.home_controller import HomeController
+from ui.controllers.stats_controller import StatsController
+from ui.controllers.rankings_controller import RankingsController
+from ui.controllers.charts_controller import ChartsController
+from ui.controllers.player_rt_intg_controller import PlayerRtIntgController
+from ui.controllers.player_rt_red_controller import PlayerRtRedController
+from ui.controllers.bayesian_controller import BayesianController
 
 def main():
     """

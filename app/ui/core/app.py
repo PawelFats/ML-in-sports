@@ -1,6 +1,6 @@
 import streamlit as st  # библиотека для веб-интерфейсов
 from typing import Dict  # аннотация типов для словаря
-from app.ui.core.base import BaseController  # базовый класс контроллеров приложения
+from ui.core.base import BaseController  # базовый класс контроллеров приложения
 
 class HockeyAnalyticsApp:
     """Главный класс приложения, управляет состоянием и маршрутизацией страниц."""

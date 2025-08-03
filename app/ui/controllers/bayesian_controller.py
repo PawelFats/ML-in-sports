@@ -1,6 +1,6 @@
-from app.ui.core.base import BaseController  # базовый класс контроллеров
-from app.ui.models.bayesian_model import BayesianModel  # модель для байесовского анализа
-from app.ui.views.bayesian_view import BayesianView  # представление для байесовского анализа
+from ui.core.base import BaseController  # базовый класс контроллеров
+from ui.models.bayesian_model import BayesianModel  # модель для байесовского анализа
+from ui.views.bayesian_view import BayesianView  # представление для байесовского анализа
 from typing import Dict, Any  # аннотации типов
 
 class BayesianController(BaseController):

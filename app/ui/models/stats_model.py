@@ -1,5 +1,5 @@
 import pandas as pd  # Импорт библиотеки pandas для работы с таблицами
-from app.ui.core.base import BaseModel  # Импорт базовой модели из проекта
+from ui.core.base import BaseModel  # Импорт базовой модели из проекта
 from typing import Any, Optional  # Типы для аннотаций
 from pathlib import Path  # Для работы с файловыми путями
 

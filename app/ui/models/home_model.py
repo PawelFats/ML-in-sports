@@ -1,4 +1,4 @@
-from app.ui.core.base import BaseModel  # базовый класс для моделей приложения
+from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Dict, Any  # аннотации типов
 
 
