@@ -1,6 +1,6 @@
-from ui.core.base import BaseController
-from ui.models.player_rt_intg_model import PlayerRtIntgModel
-from ui.views.player_rt_intg_view import PlayerRtIntgView
+from app.ui.core.base import BaseController
+from app.ui.models.player_rt_intg_model import PlayerRtIntgModel
+from app.ui.views.player_rt_intg_view import PlayerRtIntgView
 from typing import Dict, Any
 
 class PlayerRtIntgController(BaseController):

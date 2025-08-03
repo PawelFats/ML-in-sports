@@ -1,5 +1,5 @@
 import streamlit as st  # импортируем библиотеку для веб-приложений
-from ui.core.base import BaseView  # базовый класс представления
+from app.ui.core.base import BaseView  # базовый класс представления
 from typing import Any, Dict, Optional  # типизация для удобства
 import pandas as pd  # библиотека для работы с табличными данными
 

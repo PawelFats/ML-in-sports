@@ -1,6 +1,6 @@
 import streamlit as st  # библиотека Streamlit для веб-интерфейса
 import plotly.express as px  # библиотека Plotly для построения графиков
-from ui.core.base import BaseView  # базовый класс представления
+from app.ui.core.base import BaseView  # базовый класс представления
 from typing import Any, Dict, Optional, List  # типизация
 import pandas as pd  # работа с табличными данными
 

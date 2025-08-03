@@ -1,6 +1,6 @@
-from ui.core.base import BaseController
-from ui.models.charts_model import ChartsModel
-from ui.views.charts_view import ChartsView
+from app.ui.core.base import BaseController
+from app.ui.models.charts_model import ChartsModel
+from app.ui.views.charts_view import ChartsView
 from typing import Dict, Any
 import streamlit as st
 

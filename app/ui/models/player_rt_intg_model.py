@@ -1,4 +1,4 @@
-from ui.core.base import BaseModel  # базовый класс для моделей приложения
+from app.ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional  # аннотации типов
 from app.src.generate_ratings_intg import *  # функция расчёта рейтинга игроков интегральным методом
 import pandas as pd  # библиотека для работы с DataFrame

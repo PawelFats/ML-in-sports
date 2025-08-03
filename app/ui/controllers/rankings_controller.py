@@ -1,6 +1,6 @@
-from ui.core.base import BaseController
-from ui.models.rankings_model import RankingsModel
-from ui.views.rankings_view import RankingsView
+from app.ui.core.base import BaseController
+from app.ui.models.rankings_model import RankingsModel
+from app.ui.views.rankings_view import RankingsView
 from typing import Dict, Any
 
 class RankingsController(BaseController):

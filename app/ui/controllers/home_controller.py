@@ -1,6 +1,6 @@
-from ui.core.base import BaseController
-from ui.models.home_model import HomeModel
-from ui.views.home_view import HomeView
+from app.ui.core.base import BaseController
+from app.ui.models.home_model import HomeModel
+from app.ui.views.home_view import HomeView
 from typing import Dict, Any
 
 class HomeController(BaseController):

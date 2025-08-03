@@ -1,6 +1,6 @@
-from ui.core.base import BaseController
-from ui.models.player_rt_red_model import PlayerRtRedModel
-from ui.views.player_rt_red_view import PlayerRtRedView
+from app.ui.core.base import BaseController
+from app.ui.models.player_rt_red_model import PlayerRtRedModel
+from app.ui.views.player_rt_red_view import PlayerRtRedView
 from typing import Dict, Any
 
 class PlayerRtRedController(BaseController):

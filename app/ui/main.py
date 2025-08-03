@@ -4,21 +4,21 @@ import sys
 # Определяем корневую папку проекта и добавляем её в список путей Python,
 # чтобы можно было импортировать модули из корня без относительных импортов
 project_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..')  # Находим папку на уровень выше текущего файла
+    os.path.join(os.path.dirname(__file__), '../..')  # Находим папку на уровень выше текущего файла
 )
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 
 # Импортируем основной класс приложения и контроллеры для разных разделов UI
-from ui.core.app import HockeyAnalyticsApp
-from ui.controllers.home_controller import HomeController
-from ui.controllers.stats_controller import StatsController
-from ui.controllers.rankings_controller import RankingsController
-from ui.controllers.charts_controller import ChartsController
-from ui.controllers.player_rt_intg_controller import PlayerRtIntgController
-from ui.controllers.player_rt_red_controller import PlayerRtRedController
-from ui.controllers.bayesian_controller import BayesianController
+from app.ui.core.app import HockeyAnalyticsApp
+from app.ui.controllers.home_controller import HomeController
+from app.ui.controllers.stats_controller import StatsController
+from app.ui.controllers.rankings_controller import RankingsController
+from app.ui.controllers.charts_controller import ChartsController
+from app.ui.controllers.player_rt_intg_controller import PlayerRtIntgController
+from app.ui.controllers.player_rt_red_controller import PlayerRtRedController
+from app.ui.controllers.bayesian_controller import BayesianController
 
 def main():
     """

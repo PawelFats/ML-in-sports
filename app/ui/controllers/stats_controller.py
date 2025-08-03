@@ -1,6 +1,6 @@
-from ui.core.base import BaseController
-from ui.models.stats_model import StatsModel
-from ui.views.stats_view import StatsView
+from app.ui.core.base import BaseController
+from app.ui.models.stats_model import StatsModel
+from app.ui.views.stats_view import StatsView
 from typing import Dict, Any
 
 class StatsController(BaseController):
