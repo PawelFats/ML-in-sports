@@ -2,7 +2,7 @@ import pandas as pd  # библиотека для работы с таблич�
 from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional, List  # аннотации типов
 from pathlib import Path  # для работы с путями файловой системы
-from app.src.generate_ratings_elo import *
+from src.generate_ratings_elo import *
 
 class ChartsModel(BaseModel):
     """Модель для страницы графиков ELO рейтинга команды."""
@@ -114,4 +114,5 @@ class ChartsModel(BaseModel):
         Ожидается словарь с ключом 'selected_team'.
         """
         if isinstance(data, dict) and "selected_team" in data:
+
             self.selected_team = data["selected_team"]
