@@ -2,7 +2,7 @@ import streamlit as st  # библиотека для создания веб-п
 from ui.core.base import BaseView  # базовый класс представления
 from typing import Any, Dict  # типизация стандартной библиотеки
 from ui.models.data_loader import DataLoader
-from app.src.preprocessing import *  # импорт всех необходимых функций валидации и обработки данных
+from src.preprocessing import *  # импорт всех необходимых функций валидации и обработки данных
 from datetime import datetime
 
 class HomeView(BaseView):
@@ -213,4 +213,5 @@ class HomeView(BaseView):
             progress_bar.progress(step / validation_steps)
 
         validate_status.success("✅ Валидация завершена")
+
         st.success("Все данные успешно загружены и провалидированы.")
