@@ -1,6 +1,6 @@
 from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional  # аннотации типов
-from app.src.method_bayesian import bayesian_analysis  # функция для расчёта байесовского анализа
+from src.method_bayesian import bayesian_analysis  # функция для расчёта байесовского анализа
 import pandas as pd  # библиотека для работы с табличными данными
 
 
@@ -46,3 +46,4 @@ class BayesianModel(BaseModel):
         Реализован пустым, так как входных данных от пользователя нет.
         """
         pass
+
