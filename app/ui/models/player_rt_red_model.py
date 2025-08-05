@@ -1,6 +1,6 @@
 from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional  # аннотации типов
-from app.src.generate_rating_red import player_rt_red  # функция расчёта рейтинга игроков советским методом
+from src.generate_rating_red import player_rt_red  # функция расчёта рейтинга игроков советским методом
 import pandas as pd  # библиотека для работы с табличными данными
 
 
@@ -39,4 +39,5 @@ class PlayerRtRedModel(BaseModel):
 
     def update(self, data: Any) -> None:
         """Метод обновления модели (не используется для этой страницы)."""
+
         pass
