@@ -1,6 +1,6 @@
 from ui.core.base import BaseModel  # базовый класс для моделей приложения
 from typing import Any, Optional  # аннотации типов
-from app.src.generate_ratings_intg import *  # функция расчёта рейтинга игроков интегральным методом
+from src.generate_ratings_intg import *  # функция расчёта рейтинга игроков интегральным методом
 import pandas as pd  # библиотека для работы с DataFrame
 
 
@@ -41,3 +41,4 @@ class PlayerRtIntgModel(BaseModel):
     def update(self, data: Any) -> None:
         """Метод обновления модели (не используется для этой страницы)."""
         pass
+
