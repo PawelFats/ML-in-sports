@@ -1,1 +1,0 @@
-from app.src.generate_rating_red import player_rt_red

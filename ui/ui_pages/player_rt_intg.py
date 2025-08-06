@@ -1,1 +1,0 @@
-from app.src.generate_ratings_intg import player_rt_intg

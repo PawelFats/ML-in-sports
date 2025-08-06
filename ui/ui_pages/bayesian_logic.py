@@ -1,1 +1,0 @@
-from app.src.method_bayesian import bayesian_analysis
