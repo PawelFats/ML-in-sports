@@ -25,7 +25,8 @@ def crt_game_stats(compile_stats, goalk_df, game_history_df):
             'ShotT': team1_stats['a shot on target'].sum(),
             'BT_T': team1_stats['blocked throws'].sum(),
             'PM_T': team1_stats['p/m'].sum(),
-            'As_T': team1_stats['assists'].sum()
+            'As_T': team1_stats['assists'].sum(),
+            'As_T_2': team1_stats['assists_2'].sum()
         }
         
         # Информация о второй команде
@@ -36,7 +37,8 @@ def crt_game_stats(compile_stats, goalk_df, game_history_df):
             'ShotO': team2_stats['a shot on target'].sum(),
             'BT_O': team2_stats['blocked throws'].sum(),
             'PM_O': team2_stats['p/m'].sum(),
-            'As_O': team2_stats['assists'].sum()
+            'As_O': team2_stats['assists'].sum(),
+            'As_O_2': team2_stats['assists_2'].sum()
         }
         
         # Результат игры
