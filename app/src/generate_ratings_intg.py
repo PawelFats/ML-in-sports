@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 COLUMN_MAPPING = {
     'As': 'Assists',
+    'As_2': 'Assists_2',
     'BT': 'BlockedShots',
     'G': 'Goals',
     'Shot': 'Shots',
@@ -28,6 +29,7 @@ def calculate_mean_player_stats(compile_stats):
         'total time on ice': 'time',
         'goals': 'G',
         'assists': 'As',
+        'assists_2': 'As_2',
         'throws by': 'TB',
         'a shot on target': 'Shot',
         'blocked throws': 'BT',
@@ -39,6 +41,7 @@ def calculate_mean_player_stats(compile_stats):
         'time': 'mean',
         'G': 'mean',
         'As': 'mean',
+        'As_2': 'mean',
         'TB': 'mean',
         'Shot': 'mean',
         'BT': 'mean',
@@ -153,8 +156,8 @@ def add_weights(mean_stats_deviat_path):
     
     # Веса для каждого показателя в зависимости от амплуа
     weights = {
-        10: {'time': 0.35, 'G': 0.95, 'As': 0.85, 'TB': 0.4, 'Shot': 0.81, 'BT': 0.44, 'pm': 0.55},
-        9: {'time': 0.4, 'G': 0.6, 'As': 0.8, 'TB': 0.35, 'Shot': 0.43, 'BT': 0.85, 'pm': 0.75}
+        10: {'time': 0.35, 'G': 0.95, 'As': 0.85, 'As_2': 0.70, 'TB': 0.4, 'Shot': 0.81, 'BT': 0.44, 'pm': 0.55},
+        9: {'time': 0.4, 'G': 0.6, 'As': 0.8, 'As_2': 0.60, 'TB': 0.35, 'Shot': 0.43, 'BT': 0.85, 'pm': 0.75}
     }
 
     #Рассчитываем взвешенное отклонение для каждого игрока
@@ -174,13 +177,13 @@ def integral_dev(mean_stats_deviat_path):
     mean_stats_deviat = mean_stats_deviat_path
     
     # Список столбцов для исключения из расчета интегрального отклонения
-    exclude_columns = ['amplua', 'time', 'G', 'As', 'TB', 'Shot', 'BT', 'pm']
+    exclude_columns = ['amplua', 'time', 'G', 'As', 'As_2', 'TB', 'Shot', 'BT', 'pm']
 
     #Вычисление интегрального отклонения от модельных величин для каждого игрока
     columns_to_include = mean_stats_deviat.drop(['ID player'] + exclude_columns, axis=1)
     mean_stats_deviat['integral_dev'] = columns_to_include.sum(axis=1) / columns_to_include.shape[1]
     
-    exclude_columns = ['amplua', 'time', 'G', 'As', 'TB', 'Shot', 'BT', 'pm', 'dev_time', 'dev_G', 'dev_As', 'dev_TB', 'dev_Shot', 'dev_BT', 'dev_pm']
+    exclude_columns = ['amplua', 'time', 'G', 'As', 'As_2', 'TB', 'Shot', 'BT', 'pm', 'dev_time', 'dev_G', 'dev_As', 'dev_As_2', 'dev_TB', 'dev_Shot', 'dev_BT', 'dev_pm']
     
     mean_stats_deviat = mean_stats_deviat.drop(exclude_columns, axis=1)
     

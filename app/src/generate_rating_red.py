@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import seaborn as sns
 
-METRICS = ['goals', 'assists', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']
+METRICS = ['goals', 'assists', 'assists_2', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']
 P_METRICS = [f'p_{m}' for m in METRICS]
 
 @st.cache_data
@@ -35,6 +35,8 @@ def rename_columns(df):
         'p_goals': 'о_ш',
         'assists': 'ассисты',
         'p_assists': 'о_а',
+        'assists_2': 'ассисты_2',
+        'p_assists_2': 'о_а_2',
         'throws_by': 'броски_мимо',
         'p_throws_by': 'о_м',
         'shot_on_target': 'броски_в_створ',
@@ -60,6 +62,7 @@ def calculate_player_stats(df, output_file=r"data/processed/red_method/player_st
         games=('ID game', 'nunique'),
         goals=('goals', 'sum'),
         assists=('assists', 'sum'),
+        assists_2=('assists_2', 'sum'),
         throws_by=('throws by', 'sum'),
         shot_on_target=('a shot on target', 'sum'),
         blocked_throws=('blocked throws', 'sum'),
@@ -130,6 +133,7 @@ def process_and_save(
         'ID player', 'amplua', 'games',
         'goals', 'p_goals',
         'assists', 'p_assists',
+        'assists_2', 'p_assists_2',
         'throws_by', 'p_throws_by',
         'shot_on_target', 'p_shot_on_target',
         'blocked_throws', 'p_blocked_throws',
@@ -205,6 +209,7 @@ def plot_player_ratings(result_df, season_id):
     metric_labels = {
         'p_goals': 'голы',
         'p_assists': 'ассисты',
+        'p_assists_2': 'ассисты_2',
         'p_throws_by': 'мимо',
         'p_shot_on_target': 'в створ',
         'p_blocked_throws': 'блокированные',
@@ -213,7 +218,7 @@ def plot_player_ratings(result_df, season_id):
     
     players = result_df['ID player'].astype(str)
     metrics = list(metric_labels.keys())
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
     
     # 1. График: Составной столбчатый график (stacked bar chart) рейтингов в процентах
     # Рассчитываем процентное соотношение каждого показателя
@@ -351,6 +356,7 @@ def plot_team_ratings(
         games=('ID game','nunique'),
         goals=('goals','sum'),
         assists=('assists','sum'),
+        assists_2=('assists_2','sum'),
         throws_by=('throws by','sum'),
         shot_on_target=('a shot on target','sum'),
         blocked_throws=('blocked throws','sum'),
@@ -433,6 +439,7 @@ def plot_team_ratings(
     metric_labels = {
         'p_goals': 'голы',
         'p_assists': 'ассисты',
+        'p_assists_2': 'ассисты_2',
         'p_throws_by': 'мимо',
         'p_shot_on_target': 'в створ',
         'p_blocked_throws': 'блокированные',
@@ -455,13 +462,15 @@ def plot_team_ratings(
     fig_metric, ax_metric = plt.subplots(figsize=(12, 7))
     bottom = np.zeros(len(df_team_metrics))
     colors_metric = {
-        'p_goals': '#1f77b4',
-        'p_assists': '#ff7f0e',
-        'p_throws_by': '#2ca02c',
-        'p_shot_on_target': '#d62728',
-        'p_blocked_throws': '#9467bd',
-        'p_p_m': '#8c564b'
+    'p_goals': '#1f77b4',
+    'p_assists': '#ff7f0e',
+    'p_assists_2': '#2ca02c',
+    'p_throws_by': '#d62728',
+    'p_shot_on_target': '#9467bd',
+    'p_blocked_throws': '#8c564b',
+    'p_p_m': '#e377c2'
     }
+
     
     for metric in metrics:
         values = df_team_metrics[metric]
@@ -476,9 +485,9 @@ def plot_team_ratings(
     plt.tight_layout()
 
     # 7. Радарная диаграмма для топ-5 команд по суммарному рейтингу
-    df_radar = df_players.groupby('ID team')[['p_goals','p_assists','p_throws_by','p_shot_on_target','p_blocked_throws','p_p_m','player_rating']].sum().reset_index()
+    df_radar = df_players.groupby('ID team')[['p_goals','p_assists', 'p_assists_2', 'p_throws_by','p_shot_on_target','p_blocked_throws','p_p_m','player_rating']].sum().reset_index()
     top_teams = df_radar.nlargest(5, 'player_rating')  # здесь можно выбрать любую метрику или суммарный рейтинг
-    labels = ['голы', 'ассисты', 'мимо', 'в створ', 'блокированные', 'п/м']
+    labels = ['голы', 'ассисты', 'ассисты_2', 'мимо', 'в створ', 'блокированные', 'п/м']
     num_vars = len(labels)
     angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
     angles += angles[:1]  # замыкаем круг
@@ -508,10 +517,11 @@ def player_rt_red():
     # --- UI для весов индивидуальных показателей ---
     metric_weights = {
         'goals':             st.sidebar.slider("Вес голов",               0.0, 1.0, 1.0, step=0.01),
-        'assists':           st.sidebar.slider("Вес ассистов",           0.0, 1.0, 1.0, step=0.01),
+        'assists':           st.sidebar.slider("Вес ассистов",           0.0, 1.0, 0.8, step=0.01),
+        'assists_2':         st.sidebar.slider("Вес ассистов_2",           0.0, 1.0, 0.6, step=0.01),
         'throws_by':         st.sidebar.slider("Вес бросков мимо",       0.0, 1.0, 1.0, step=0.01),
         'shot_on_target':    st.sidebar.slider("Вес бросков в створ",    0.0, 1.0, 1.0, step=0.01),
-        'blocked_throws':    st.sidebar.slider("Вес блокированных бросков",0.0, 1.0, 1.0, step=0.01),
+        'blocked_throws':    st.sidebar.slider("Вес блокированных бросков",0.0, 1.0, 0.5, step=0.01),
         'p_m':               st.sidebar.slider("Вес \"п/м\"",             0.0, 1.0, 1.0, step=0.01),
         # … и так для каждого METRICS
     }
@@ -623,7 +633,7 @@ def player_rt_red():
                 df_players_all = st.session_state['last_df_players']
                 expected_cols = [
                     'ID игрока', 'амплуа', 'игры', 'шайбы', 'о_ш',
-                    'ассисты', 'о_а', 'броски_мимо', 'о_м',
+                    'ассисты', 'о_а', 'ассисты_2', 'о_а_2', 'броски_мимо', 'о_м',
                     'броски_в_створ', 'о_с', 'блок_броски',
                     'о_б', 'п/м', 'о_п/м', 'общий_рейтинг'
                 ]

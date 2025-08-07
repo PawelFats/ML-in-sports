@@ -494,16 +494,22 @@ def add_goals_and_assists(df_merged, df_goals_and_passes):
     # Груп таблицы goals_and_passes по 'ID game', 'ID team', 'ID player assist' для подсчета ассистов
     assists_grouped = df_goals_and_passes.groupby(['ID game', 'ID team', 'ID player assist']).size().reset_index(name='assists')
 
+    # Груп таблицы goals_and_passes по 'ID game', 'ID team', 'ID player assist' для подсчета ассистов
+    assists_grouped_2 = df_goals_and_passes.groupby(['ID game', 'ID team', 'ID player assist 2']).size().reset_index(name='assists_2')
+
     # Объединение результатов подсчета голов и голевых передач с таблицей df_merged
     merged_data = pd.merge(df_merged, goals_grouped, left_on=['ID game', 'ID team', 'ID player'], right_on=['ID game', 'ID team', 'ID player scored'], how='left')
     merged_data = pd.merge(merged_data, assists_grouped, left_on=['ID game', 'ID team', 'ID player'], right_on=['ID game', 'ID team', 'ID player assist'], how='left')
+    merged_data = pd.merge(merged_data, assists_grouped_2, left_on=['ID game', 'ID team', 'ID player'], right_on=['ID game', 'ID team', 'ID player assist 2'], how='left')
 
     # Заполнение пропущенных значений нулями
     merged_data['goals'] = merged_data['goals'].fillna(0)
     merged_data['assists'] = merged_data['assists'].fillna(0)
+    merged_data['assists_2'] = merged_data['assists_2'].fillna(0)
+
 
     # Удаление лишних столбцов, если они были добавлены из goals_grouped и assists_grouped
-    merged_data.drop(['ID player scored', 'ID player assist'], axis=1, inplace=True, errors='ignore')
+    merged_data.drop(['ID player scored', 'ID player assist', 'ID player assist 2'], axis=1, inplace=True, errors='ignore')
 
     return merged_data
 
@@ -657,7 +663,7 @@ def clean_problem(file_path, output_path):
     compile_stats = pd.read_csv(file_path)
 
     # Список столбцов с игровыми показателями для проверки
-    columns_to_check = ['total time on ice', 'throws by', 'a shot on target', 'blocked throws', 'p/m', 'goals', 'assists']
+    columns_to_check = ['total time on ice', 'throws by', 'a shot on target', 'blocked throws', 'p/m', 'goals', 'assists', 'assists_2']
     
     # Заменяем нули на NaN (чтобы их можно было обнаружить как отсутствующие значения)
     compile_stats[columns_to_check] = compile_stats[columns_to_check].replace({0: None})
