@@ -511,18 +511,18 @@ def plot_team_ratings(
 def player_rt_red():
     
     # --- UI для весов амплуа ---
-    coef_def    = st.sidebar.slider("Вес защитников ", 0.0, 1.0, 2/3, step=0.01)
-    coef_att    = st.sidebar.slider("Вес нападающих ",   0.0, 1.0, 1/6, step=0.01)
+    coef_def    = st.sidebar.slider("Вес защитников ", 0.0, 1.0, 1.0, step=0.01)
+    coef_att    = st.sidebar.slider("Вес нападающих ",   0.0, 1.0, 1.0, step=0.01)
 
     # --- UI для весов индивидуальных показателей ---
     metric_weights = {
         'goals':             st.sidebar.slider("Вес голов",               0.0, 1.0, 1.0, step=0.01),
         'assists':           st.sidebar.slider("Вес ассистов",           0.0, 1.0, 0.8, step=0.01),
         'assists_2':         st.sidebar.slider("Вес ассистов_2",           0.0, 1.0, 0.6, step=0.01),
-        'throws_by':         st.sidebar.slider("Вес бросков мимо",       0.0, 1.0, 1.0, step=0.01),
-        'shot_on_target':    st.sidebar.slider("Вес бросков в створ",    0.0, 1.0, 1.0, step=0.01),
+        'throws_by':         st.sidebar.slider("Вес бросков мимо",       0.0, 1.0, 0.1, step=0.01),
+        'shot_on_target':    st.sidebar.slider("Вес бросков в створ",    0.0, 1.0, 0.3, step=0.01),
         'blocked_throws':    st.sidebar.slider("Вес блокированных бросков",0.0, 1.0, 0.5, step=0.01),
-        'p_m':               st.sidebar.slider("Вес \"п/м\"",             0.0, 1.0, 1.0, step=0.01),
+        'p_m':               st.sidebar.slider("Вес \"п/м\"",             0.0, 1.0, 0.5, step=0.01),
         # … и так для каждого METRICS
     }
     with st.spinner("Загрузка данных..."):
