@@ -658,7 +658,8 @@ def player_rt_red():
         players_input = list(players_input_9) + list(players_input_10)
 
         # Автопересчет при изменении весов
-        if st.button("Рассчитать статистику") or True:
+        # st.button("Рассчитать статистику")
+        if True:
             # Обработка нескольких сезонов
             result_df = process_seasons(
                 df_compile_stats,
@@ -696,7 +697,8 @@ def player_rt_red():
         show_roster = st.checkbox("Отобразить состав команд")
 
         # Автопересчет при изменении весов
-        if st.button("Построить график") or True:
+        # st.button("Построить график")
+        if True:
             df_players, df_team, \
             fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = \
                 plot_team_ratings(df_compile_stats,
