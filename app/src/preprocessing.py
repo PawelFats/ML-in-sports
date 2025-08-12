@@ -6,12 +6,28 @@ import chardet
 
 warnings.filterwarnings('ignore')
 
+def _replace_zeros_except(df: pd.DataFrame, exclude_columns: list[str]) -> pd.DataFrame:
+    """
+    Replace 0 -> NaN in all columns EXCEPT those listed in exclude_columns.
+    Returns the same DataFrame for chaining.
+    """
+    exclude_set = set(exclude_columns or [])
+    for column_name in df.columns:
+        if column_name not in exclude_set:
+            df[column_name] = df[column_name].replace(0, np.nan)
+    return df
+
 def replace_data(folder_path):
     for filename in os.listdir(folder_path):
         if filename.endswith(".csv"):
             file_path = os.path.join(folder_path, filename)
             df = pd.read_csv(file_path)
-            df.replace(0, np.nan, inplace=True)
+            # ВАЖНО: в game_history столбец 'division' может быть равен 0 (валидное значение)
+            # Исключаем его из замены 0 -> NaN.
+            if filename.lower() == 'game_history.csv' and 'division' in df.columns:
+                df = _replace_zeros_except(df, exclude_columns=['division'])
+            else:
+                df.replace(0, np.nan, inplace=True)
             df.to_csv(file_path, index=False)
 
 def re_format_file(folder_path):
@@ -66,8 +82,11 @@ def replace_zero_with_nan(folder_path: str) -> None:
         try:
             # Читаем CSV
             df = pd.read_csv(file_path)
-            # Заменяем нули на NaN
-            df.replace(0, np.nan, inplace=True)
+            # Заменяем нули на NaN, но НЕ для 'division' в game_history
+            if filename.lower() == 'game_history.csv' and 'division' in df.columns:
+                df = _replace_zeros_except(df, exclude_columns=['division'])
+            else:
+                df.replace(0, np.nan, inplace=True)
             # Сохраняем обратно
             df.to_csv(file_path, index=False)
             print(f"Обработан файл: {filename}")
