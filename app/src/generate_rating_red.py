@@ -7,6 +7,75 @@ import seaborn as sns
 METRICS = ['goals', 'assists', 'assists_2', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']
 P_METRICS = [f'p_{m}' for m in METRICS]
 
+def build_division_weights_ui(df_history: pd.DataFrame) -> dict[int, float]:
+    """UI блок с весами дивизионов (можно скрыть/раскрыть)."""
+    unique_divisions = sorted(pd.Series(df_history.get('division', pd.Series(dtype=float))).dropna().unique())
+    division_weights: dict[int, float] = {}
+    with st.expander("Веса дивизионов", expanded=False):
+        for div in unique_divisions:
+            try:
+                div_int = int(div)
+            except Exception:
+                continue
+            division_weights[div_int] = st.slider(
+                f"Дивизион {div_int}", 0.0, 3.0, 1.0, step=0.1, key=f"div_w_{div_int}"
+            )
+    return division_weights
+
+def build_amplua_weights_ui() -> tuple[float, float]:
+    """UI блок с весами амплуа (можно скрыть/раскрыть)."""
+    with st.expander("Веса амплуа", expanded=False):
+        coef_def = st.slider("Вес защитников", 0.0, 3.0, 1.0, step=0.01)
+        coef_att = st.slider("Вес нападающих", 0.0, 3.0, 1.0, step=0.01)
+    return coef_def, coef_att
+
+def build_metric_weights_ui() -> dict[str, float]:
+    """UI блок с весами показателей (можно скрыть/раскрыть)."""
+    defaults = {
+        'goals': 1.0,
+        'assists': 0.8,
+        'assists_2': 0.6,
+        'throws_by': 0.1,
+        'shot_on_target': 0.3,
+        'blocked_throws': 0.5,
+        'p_m': 0.5,
+    }
+    weights: dict[str, float] = {}
+    with st.expander("Веса показателей", expanded=False):
+        for metric in METRICS:
+            label_ru = {
+                'goals': 'голы',
+                'assists': 'ассисты',
+                'assists_2': 'ассисты_2',
+                'throws_by': 'броски мимо',
+                'shot_on_target': 'броски в створ',
+                'blocked_throws': 'блокированные броски',
+                'p_m': 'п/м',
+            }.get(metric, metric)
+            weights[metric] = st.slider(
+                f"Вес {label_ru}", 0.0, 3.0, float(defaults.get(metric, 1.0)), step=0.01, key=f"m_w_{metric}"
+            )
+    return weights
+
+def compute_latest_player_division(df_compile: pd.DataFrame, df_history: pd.DataFrame) -> pd.DataFrame:
+    """
+    Возвращает DataFrame с колонками ['ID player', 'division'] — последний известный дивизион игрока по дате игры.
+    """
+    if 'ID game' not in df_compile.columns:
+        return pd.DataFrame(columns=['ID player', 'division'])
+    hist_cols = [c for c in ['ID', 'date', 'division'] if c in df_history.columns]
+    merged = pd.merge(
+        df_compile[['ID player', 'ID game']].drop_duplicates(),
+        df_history[hist_cols],
+        left_on='ID game', right_on='ID', how='left'
+    )
+    if 'date' in merged.columns:
+        merged['date'] = pd.to_datetime(merged['date'], errors='coerce')
+        merged = merged.sort_values('date')
+    merged = merged.dropna(subset=['division']) if 'division' in merged.columns else merged
+    latest = merged.drop_duplicates(subset=['ID player'], keep='last')
+    return latest[['ID player', 'division']] if {'ID player', 'division'}.issubset(latest.columns) else pd.DataFrame(columns=['ID player', 'division'])
+
 @st.cache_data
 def load_data():
     df_history = pd.read_csv(r"data/raw/game_history.csv")
@@ -107,6 +176,7 @@ def process_and_save(
         coef_def: float,
         coef_att: float,
         metric_weights: dict[str, float],
+        division_weights: dict[int, float] | None = None,
         output_file: str = r"data/processed/red_method/player_stats_with_points.csv"
  ) -> pd.DataFrame:
     """
@@ -127,6 +197,17 @@ def process_and_save(
 
     # Объединяем результаты
     df_final = pd.concat([df_defenders, df_forwards], ignore_index=True)
+
+    # Применяем вес дивизиона ПОСЛЕ расчёта рейтинга игрока
+    if division_weights:
+        # Вычисляем последний известный дивизион игрока
+        latest_player_div = compute_latest_player_division(df, pd.read_csv(r"data/raw/game_history.csv"))
+        df_final = pd.merge(df_final, latest_player_div, on='ID player', how='left')
+        df_final['division'] = df_final['division'].astype('Int64')
+        df_final['player_rating'] = df_final.apply(
+            lambda r: r['player_rating'] * float(division_weights.get(int(r['division']) if pd.notna(r['division']) else 0, 1.0)),
+            axis=1
+        )
 
     # Упорядочиваем колонки по образцу
     expected_cols = [
@@ -156,7 +237,8 @@ def process_seasons(
          player_ids: list[int] | None,
          coef_def: float,
          coef_att: float,
-         metric_weights: dict[str, float],
+          metric_weights: dict[str, float],
+          division_weights: dict[int, float] | None = None,
          output_file: str = r"data/processed/red_method/season_player_stats_with_points.csv"
  ) -> pd.DataFrame:
     """
@@ -196,6 +278,7 @@ def process_seasons(
         coef_def,
         coef_att,
         metric_weights,
+        division_weights,
         output_file
     )
     return df_final
@@ -291,7 +374,7 @@ def plot_player_ratings(result_df, season_id):
     
     # 5. Радарная диаграмма для топ-5 игроков
     #result_df['total_rating'] = result_df[metrics].sum(axis=1)
-    top_players = result_df.nlargest(5, 'player_rating')
+    top_players = result_df.nlargest(5, 'player_rating') if not result_df.empty else result_df
     labels = list(metric_labels.values())
     num_metrics = len(labels)
     angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
@@ -329,7 +412,8 @@ def plot_team_ratings(
          team_ids: list[int]|None,
          coef_def: float,
          coef_att: float,
-         metric_weights: dict[str, float]
+         metric_weights: dict[str, float],
+         division_weights: dict[int, float] | None = None
  ):
     """
     Функция строит рейтинги команд с учётом пользовательских весов.
@@ -375,6 +459,15 @@ def plot_team_ratings(
     df_team['team_rating'] = df_team['team_rating'].round(2)
     divs = df.drop_duplicates(subset='ID team')[['ID team','division']]
     df_team = df_team.merge(divs,on='ID team',how='left')
+
+    # Применяем вес дивизиона к ИТОГОВОМУ рейтингу команды
+    if division_weights:
+        df_team['division'] = df_team['division'].astype('Int64')
+        df_team['team_rating'] = df_team.apply(
+            lambda r: r['team_rating'] * float(division_weights.get(int(r['division']) if pd.notna(r['division']) else 0, 1.0)),
+            axis=1
+        )
+        df_team['team_rating'] = df_team['team_rating'].round(2)
     
     # 1. Столбчатая диаграмма суммарного рейтинга для команд
     fig_total, ax_total = plt.subplots(figsize=(12, 7))
@@ -509,30 +602,23 @@ def plot_team_ratings(
     return df_players, df_team, fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar
 
 def player_rt_red():
-    
-    # --- UI для весов амплуа ---
-    coef_def    = st.sidebar.slider("Вес защитников ", 0.0, 1.0, 1.0, step=0.01)
-    coef_att    = st.sidebar.slider("Вес нападающих ",   0.0, 1.0, 1.0, step=0.01)
+    # Заголовок
+    st.title("Рейтинг игроков (советский метод)")
 
-    # --- UI для весов индивидуальных показателей ---
-    metric_weights = {
-        'goals':             st.sidebar.slider("Вес голов",               0.0, 1.0, 1.0, step=0.01),
-        'assists':           st.sidebar.slider("Вес ассистов",           0.0, 1.0, 0.8, step=0.01),
-        'assists_2':         st.sidebar.slider("Вес ассистов_2",           0.0, 1.0, 0.6, step=0.01),
-        'throws_by':         st.sidebar.slider("Вес бросков мимо",       0.0, 1.0, 0.1, step=0.01),
-        'shot_on_target':    st.sidebar.slider("Вес бросков в створ",    0.0, 1.0, 0.3, step=0.01),
-        'blocked_throws':    st.sidebar.slider("Вес блокированных бросков",0.0, 1.0, 0.5, step=0.01),
-        'p_m':               st.sidebar.slider("Вес \"п/м\"",             0.0, 1.0, 0.5, step=0.01),
-        # … и так для каждого METRICS
-    }
+    # Постоянные UI-блоки под заголовком
+    coef_def, coef_att = build_amplua_weights_ui()
+    metric_weights = build_metric_weights_ui()
+
     with st.spinner("Загрузка данных..."):
         df_history, df_compile_stats, df_goalk_stats = load_data()
-    
+
     # Объединяем данные, чтобы брать только те сезоны, в которых есть игры из compile_stats
     df_merged = pd.merge(df_compile_stats, df_history, left_on="ID game", right_on="ID", how="inner")
     available_seasons = sorted(df_merged["ID season"].unique())
-    
-    st.title("Рейтинг игроков (советский метод)")
+
+    # Блок весов дивизионов сразу под заголовком (после загрузки данных)
+    division_weights = build_division_weights_ui(df_history)
+
     action = st.selectbox(
         "Выберите действие",
         ["Актуальный рейтинг игроков", "Сезонная статистика игроков", "Сезонная статистика команд"]
@@ -541,11 +627,13 @@ def player_rt_red():
     
     # 1. Общая статистика игроков
     if action == "Актуальный рейтинг игроков":
-        # теперь process_and_save должен принимать еще и metric_weights и коэффициент
-        stats = process_and_save(df_compile_stats,
-                                coef_def,      # коэффициент для защитников
-                                coef_att,      # коэффициент для нападающих
-                                metric_weights)
+        stats = process_and_save(
+            df_compile_stats,
+            coef_def,
+            coef_att,
+            metric_weights,
+            division_weights,
+        )
         stats = rename_columns(stats)
         st.dataframe(stats)
 
@@ -569,15 +657,19 @@ def player_rt_red():
         players_input_10 = st.multiselect("Атакующие", options=players_10, default=players_10[:2])
         players_input = list(players_input_9) + list(players_input_10)
 
-        if st.button("Рассчитать статистику"):
+        # Автопересчет при изменении весов
+        if st.button("Рассчитать статистику") or True:
             # Обработка нескольких сезонов
-            result_df = process_seasons(df_compile_stats,
-                            df_history,
-                            season_ids,
-                            players_input,
-                            coef_def,
-                            coef_att,
-                            metric_weights)
+            result_df = process_seasons(
+                df_compile_stats,
+                df_history,
+                season_ids,
+                players_input,
+                coef_def,
+                coef_att,
+                metric_weights,
+                division_weights,
+            )
             fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, ",".join(map(str, season_ids)) or "все сезоны")
             with st.expander("📉 Графики по показателям", expanded=False):
                 st.pyplot(fig1)
@@ -603,7 +695,8 @@ def player_rt_red():
         team_ids = st.multiselect("Выберите команды", available_teams, default=available_teams[:4])
         show_roster = st.checkbox("Отобразить состав команд")
 
-        if st.button("Построить график"):
+        # Автопересчет при изменении весов
+        if st.button("Построить график") or True:
             df_players, df_team, \
             fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = \
                 plot_team_ratings(df_compile_stats,
@@ -612,7 +705,8 @@ def player_rt_red():
                                 team_ids,
                                 coef_def,
                                 coef_att,
-                                metric_weights)
+                                metric_weights,
+                                division_weights)
             with st.expander("📉 Графики по показателям", expanded=False):
                 st.pyplot(fig_total)
                 st.pyplot(fig_stacked)
