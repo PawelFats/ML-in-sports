@@ -972,26 +972,32 @@ def player_rt_red():
                     'о_б', 'п/м', 'о_п/м', 'общий_рейтинг'
                 ]
                 for tid in st.session_state['last_team_ids']:
-                    st.markdown(f"**Команда ID {tid}**")
-                    if include_goalies and 'gk_table' in locals():
-                        gk_table_team = gk_table[gk_table['ID team'] == tid]
-                        if not gk_table_team.empty:
-                            if season_ids:
-                                st.markdown("Вратари (выбранные сезоны):")
-                            else:
-                                st.markdown("Вратари (за все время):")
-                            # Переименовываем ID player в ID игрока и убираем колонку ID команды
-                            gk_table_team = gk_table_team.rename(columns={'ID player': 'ID игрока'})
-                            gk_table_team = gk_table_team.drop(columns=['ID team'])
-                            st.dataframe(gk_table_team, use_container_width=True)
-                    roster = df_players_all[df_players_all['ID team'] == tid]
-                    if roster.empty:
-                        st.write("Нет данных по игрокам для этой команды.")
-                    else:
-                        roster = rename_columns(roster)
-                        cols = [c for c in expected_cols if c in roster.columns]
-                        st.dataframe(roster[cols], use_container_width=True, height=400,
-                                    key=f"roster_{tid}")
+                    with st.expander(f"Команда ID {tid}", expanded=False):
+                        # Вратари
+                        if include_goalies and 'gk_table' in locals():
+                            gk_table_team = gk_table[gk_table['ID team'] == tid]
+                            if not gk_table_team.empty:
+                                st.markdown("### Вратари")
+                                if season_ids:
+                                    st.caption("(выбранные сезоны)")
+                                else:
+                                    st.caption("(за все время)")
+                                # Переименовываем ID player в ID игрока и убираем колонку ID команды
+                                gk_table_team = gk_table_team.rename(columns={'ID player': 'ID игрока'})
+                                gk_table_team = gk_table_team.drop(columns=['ID team'])
+                                st.dataframe(gk_table_team, use_container_width=True)
+                        
+                        # Полевые игроки
+                        roster = df_players_all[df_players_all['ID team'] == tid]
+                        if roster.empty:
+                            st.markdown("### Полевые игроки")
+                            st.write("Нет данных по игрокам для этой команды.")
+                        else:
+                            st.markdown("### Полевые игроки")
+                            roster = rename_columns(roster)
+                            cols = [c for c in expected_cols if c in roster.columns]
+                            st.dataframe(roster[cols], use_container_width=True, height=400,
+                                        key=f"roster_{tid}")
 
     # 4. Рейтинг вратарей
     elif action == "Рейтинг вратарей":
