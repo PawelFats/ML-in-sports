@@ -1,0 +1,25 @@
+{
+  "amplua": {
+    "def": 1.0,
+    "att": 1.0
+  },
+  "metrics": {
+    "goals": 1.0,
+    "assists": 0.8,
+    "assists_2": 0.6,
+    "throws_by": 0.1,
+    "shot_on_target": 0.3,
+    "blocked_throws": 0.5,
+    "p_m": 0.5
+  },
+  "divisions": {
+    "0": 1.0,
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.0,
+    "7": 1.0
+  }
+}

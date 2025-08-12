@@ -3,11 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
 import seaborn as sns
+import json
+import os
 
 METRICS = ['goals', 'assists', 'assists_2', 'throws_by', 'shot_on_target', 'blocked_throws', 'p_m']
 P_METRICS = [f'p_{m}' for m in METRICS]
 
-def build_division_weights_ui(df_history: pd.DataFrame) -> dict[int, float]:
+def build_division_weights_ui(df_history: pd.DataFrame, defaults: dict[int, float] | None = None) -> dict[int, float]:
     """UI блок с весами дивизионов (можно скрыть/раскрыть)."""
     unique_divisions = sorted(pd.Series(df_history.get('division', pd.Series(dtype=float))).dropna().unique())
     division_weights: dict[int, float] = {}
@@ -18,18 +20,18 @@ def build_division_weights_ui(df_history: pd.DataFrame) -> dict[int, float]:
             except Exception:
                 continue
             division_weights[div_int] = st.slider(
-                f"Дивизион {div_int}", 0.0, 3.0, 1.0, step=0.1, key=f"div_w_{div_int}"
+                f"Дивизион {div_int}", 0.0, 3.0, float((defaults or {}).get(div_int, 1.0)), step=0.1, key=f"div_w_{div_int}"
             )
     return division_weights
 
-def build_amplua_weights_ui() -> tuple[float, float]:
+def build_amplua_weights_ui(defaults: dict[str, float] | None = None) -> tuple[float, float]:
     """UI блок с весами амплуа (можно скрыть/раскрыть)."""
     with st.expander("Веса амплуа", expanded=False):
-        coef_def = st.slider("Вес защитников", 0.0, 3.0, 1.0, step=0.1)
-        coef_att = st.slider("Вес нападающих", 0.0, 3.0, 1.0, step=0.1)
+        coef_def = st.slider("Вес защитников", 0.0, 3.0, float((defaults or {}).get('def', 1.0)), step=0.1)
+        coef_att = st.slider("Вес нападающих", 0.0, 3.0, float((defaults or {}).get('att', 1.0)), step=0.1)
     return coef_def, coef_att
 
-def build_metric_weights_ui() -> dict[str, float]:
+def build_metric_weights_ui(defaults_from_file: dict[str, float] | None = None) -> dict[str, float]:
     """UI блок с весами показателей (можно скрыть/раскрыть)."""
     defaults = {
         'goals': 1.0,
@@ -40,6 +42,8 @@ def build_metric_weights_ui() -> dict[str, float]:
         'blocked_throws': 0.5,
         'p_m': 0.5,
     }
+    if defaults_from_file:
+        defaults.update({k: float(v) for k, v in defaults_from_file.items() if k in defaults})
     weights: dict[str, float] = {}
     with st.expander("Веса показателей", expanded=False):
         for metric in METRICS:
@@ -56,6 +60,35 @@ def build_metric_weights_ui() -> dict[str, float]:
                 f"Вес {label_ru}", 0.0, 3.0, float(defaults.get(metric, 1.0)), step=0.1, key=f"m_w_{metric}"
             )
     return weights
+
+WEIGHTS_FILE = r"data/processed/red_method/weights_red.json"
+
+def load_saved_weights() -> dict:
+    try:
+        if os.path.exists(WEIGHTS_FILE):
+            with open(WEIGHTS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Приводим ключи дивизионов к int
+                divs = data.get('divisions', {})
+                data['divisions'] = {int(k): float(v) for k, v in divs.items()}
+                return data
+    except Exception:
+        pass
+    return {
+        'amplua': {'def': 1.0, 'att': 1.0},
+        'metrics': {},
+        'divisions': {}
+    }
+
+def save_weights(amplua: tuple[float, float], metrics: dict[str, float], divisions: dict[int, float]) -> None:
+    payload = {
+        'amplua': {'def': float(amplua[0]), 'att': float(amplua[1])},
+        'metrics': {k: float(v) for k, v in metrics.items()},
+        'divisions': {str(int(k)): float(v) for k, v in divisions.items()},
+    }
+    os.makedirs(os.path.dirname(WEIGHTS_FILE), exist_ok=True)
+    with open(WEIGHTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
 
 def compute_latest_player_division(df_compile: pd.DataFrame, df_history: pd.DataFrame) -> pd.DataFrame:
     """
@@ -605,9 +638,12 @@ def player_rt_red():
     # Заголовок
     st.title("Рейтинг игроков (советский метод)")
 
+    # Загружаем сохранённые веса
+    saved = load_saved_weights()
+
     # Постоянные UI-блоки под заголовком
-    coef_def, coef_att = build_amplua_weights_ui()
-    metric_weights = build_metric_weights_ui()
+    coef_def, coef_att = build_amplua_weights_ui(saved.get('amplua'))
+    metric_weights = build_metric_weights_ui(saved.get('metrics'))
 
     with st.spinner("Загрузка данных..."):
         df_history, df_compile_stats, df_goalk_stats = load_data()
@@ -617,7 +653,12 @@ def player_rt_red():
     available_seasons = sorted(df_merged["ID season"].unique())
 
     # Блок весов дивизионов сразу под заголовком (после загрузки данных)
-    division_weights = build_division_weights_ui(df_history)
+    division_weights = build_division_weights_ui(df_history, saved.get('divisions'))
+
+    # Кнопка сохранения весов
+    if st.button("Сохранить веса"):
+        save_weights((coef_def, coef_att), metric_weights, division_weights)
+        st.success("Веса сохранены и будут подставляться по умолчанию")
 
     action = st.selectbox(
         "Выберите действие",
