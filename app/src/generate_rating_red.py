@@ -24,12 +24,13 @@ def build_division_weights_ui(df_history: pd.DataFrame, defaults: dict[int, floa
             )
     return division_weights
 
-def build_amplua_weights_ui(defaults: dict[str, float] | None = None) -> tuple[float, float]:
+def build_amplua_weights_ui(defaults: dict[str, float] | None = None) -> tuple[float, float, float]:
     """UI блок с весами амплуа (можно скрыть/раскрыть)."""
     with st.expander("Веса амплуа", expanded=False):
         coef_def = st.slider("Вес защитников", 0.0, 3.0, float((defaults or {}).get('def', 1.0)), step=0.1)
         coef_att = st.slider("Вес нападающих", 0.0, 3.0, float((defaults or {}).get('att', 1.0)), step=0.1)
-    return coef_def, coef_att
+        coef_gk  = st.slider("Вес вратаря",    0.0, 3.0, float((defaults or {}).get('gk', 1.0)),  step=0.1)
+    return coef_def, coef_att, coef_gk
 
 def build_metric_weights_ui(defaults_from_file: dict[str, float] | None = None) -> dict[str, float]:
     """UI блок с весами показателей (можно скрыть/раскрыть)."""
@@ -75,16 +76,18 @@ def load_saved_weights() -> dict:
     except Exception:
         pass
     return {
-        'amplua': {'def': 1.0, 'att': 1.0},
+        'amplua': {'def': 1.0, 'att': 1.0, 'gk': 1.0},
         'metrics': {},
-        'divisions': {}
+        'divisions': {},
+        'goalie_metrics': {'%': 1.0, 'КН': 1.0, 'СИ': 1.0, 'П': 1.0}
     }
 
-def save_weights(amplua: tuple[float, float], metrics: dict[str, float], divisions: dict[int, float]) -> None:
+def save_weights(amplua: tuple[float, float], metrics: dict[str, float], divisions: dict[int, float], goalie_metrics: dict[str, float] | None = None) -> None:
     payload = {
-        'amplua': {'def': float(amplua[0]), 'att': float(amplua[1])},
+        'amplua': {'def': float(amplua[0]), 'att': float(amplua[1]), 'gk': float(amplua[2])},
         'metrics': {k: float(v) for k, v in metrics.items()},
         'divisions': {str(int(k)): float(v) for k, v in divisions.items()},
+        'goalie_metrics': {k: float(v) for k, v in (goalie_metrics or {}).items()},
     }
     os.makedirs(os.path.dirname(WEIGHTS_FILE), exist_ok=True)
     with open(WEIGHTS_FILE, 'w', encoding='utf-8') as f:
@@ -108,6 +111,147 @@ def compute_latest_player_division(df_compile: pd.DataFrame, df_history: pd.Data
     merged = merged.dropna(subset=['division']) if 'division' in merged.columns else merged
     latest = merged.drop_duplicates(subset=['ID player'], keep='last')
     return latest[['ID player', 'division']] if {'ID player', 'division'}.issubset(latest.columns) else pd.DataFrame(columns=['ID player', 'division'])
+
+def compute_goalkeepers_ratings(
+    df_goalkeepers: pd.DataFrame,
+    goals_and_passes_path: str = r"data/raw/goals_and_passes.csv",
+    goalie_metric_weights: dict[str, float] | None = None,
+    allowed_game_ids: set[int] | list[int] | None = None,
+    allowed_team_ids: set[int] | list[int] | None = None,
+    include_team_col: bool = False,
+    amplua_weight_gk: float = 1.0,
+) -> pd.DataFrame:
+    """
+    Формирует агрегированную таблицу рейтингов вратарей для красного метода.
+    Выходные колонки: ['ID player', '%', 'КН', 'СИ', 'П']
+    Где:
+      - %: общий процент отраженных бросков = (1 - sum(missed pucks)/sum(total throws)) * 100
+      - КН: коэффициент надежности = (60 * sum(missed pucks)) / (60 * games) = sum(missed pucks) / games
+      - СИ: число сухих игр = count(missed pucks == 0)
+      - П: победы = число игр, где команда вратаря забила больше соперника
+    """
+    if df_goalkeepers is None or df_goalkeepers.empty:
+        return pd.DataFrame(columns=['ID player', '%', 'КН', 'СИ', 'П'])
+
+    # Приводим названия колонок к ожидаемым
+    cols_map = {
+        'ID game': 'ID game',
+        'ID team': 'ID team',
+        'ID player': 'ID player',
+        'missed pucks': 'missed pucks',
+        'total throws': 'total throws',
+        '% of reflected shots': '% of reflected shots',
+    }
+    for c in cols_map:
+        if c not in df_goalkeepers.columns:
+            # Если что-то критичное отсутствует
+            return pd.DataFrame(columns=['ID player', '%', 'КН', 'СИ', 'П'])
+
+    df_gk = df_goalkeepers.copy()
+    # Фильтры по играм/командам
+    if allowed_game_ids is not None:
+        allowed_game_ids = set(int(x) for x in allowed_game_ids)
+        df_gk = df_gk[df_gk['ID game'].astype(int).isin(allowed_game_ids)]
+    if allowed_team_ids is not None:
+        allowed_team_ids = set(int(x) for x in allowed_team_ids)
+        df_gk = df_gk[df_gk['ID team'].astype(int).isin(allowed_team_ids)]
+    # Убедимся, что числовые поля приведены
+    df_gk['missed pucks'] = pd.to_numeric(df_gk['missed pucks'], errors='coerce').fillna(0)
+    df_gk['total throws'] = pd.to_numeric(df_gk['total throws'], errors='coerce').fillna(0)
+
+    # Победы: считаем голы по данным goals_and_passes
+    try:
+        df_gap = pd.read_csv(goals_and_passes_path)
+        # Проверим наличие необходимых колонок
+        if not {'ID game', 'ID team'}.issubset(df_gap.columns):
+            raise KeyError('goals_and_passes missing required columns')
+        if allowed_game_ids is not None and len(allowed_game_ids) > 0:
+            df_gap = df_gap[df_gap['ID game'].astype(int).isin(allowed_game_ids)]
+        # Подсчет голов по игре и команде
+        goals_by_team = df_gap.groupby(['ID game', 'ID team']).size().reset_index(name='team_goals')
+        goals_total = df_gap.groupby(['ID game']).size().reset_index(name='total_goals')
+        # Объединим с уникальными строками вратарей по игре и команде
+        gk_games = df_gk[['ID game', 'ID team', 'ID player']].drop_duplicates()
+        gk_games = gk_games.merge(goals_by_team, on=['ID game', 'ID team'], how='left')
+        gk_games = gk_games.merge(goals_total, on='ID game', how='left')
+        gk_games['team_goals'] = gk_games['team_goals'].fillna(0)
+        gk_games['total_goals'] = gk_games['total_goals'].fillna(0)
+        gk_games['opponent_goals'] = (gk_games['total_goals'] - gk_games['team_goals']).clip(lower=0)
+        gk_games['win'] = (gk_games['team_goals'] > gk_games['opponent_goals']).astype(int)
+        wins_by_player = gk_games.groupby('ID player')['win'].sum().reset_index(name='П')
+    except Exception:
+        # Если файл не загрузился, проставим нули
+        wins_by_player = df_gk.groupby('ID player').size().reset_index(name='П')
+        wins_by_player['П'] = 0
+
+    # Агрегации по игроку: суммарные броски, пропущенные, игры, сухие матчи
+    group_keys = ['ID player', 'ID team'] if include_team_col else ['ID player']
+    agg = df_gk.groupby(group_keys).agg(
+        sum_missed=('missed pucks', 'sum'),
+        sum_throws=('total throws', 'sum'),
+        games=('ID game', 'nunique'),
+        clean_sheets=('missed pucks', lambda s: int((s == 0).sum())),
+    ).reset_index()
+
+    # % отраженных бросков
+    agg['%'] = np.where(agg['sum_throws'] > 0, (1 - agg['sum_missed'] / agg['sum_throws']) * 100.0, np.nan)
+    # КН по формуле (60*пропущенные)/(60*игры) = пропущенные/игры
+    agg['КН'] = np.where(agg['games'] > 0, agg['sum_missed'] / agg['games'], np.nan)
+    agg['СИ'] = agg['clean_sheets']
+
+    # Победы
+    # Победы: считаем по тем же ключам группировки
+    if include_team_col and 'ID team' in gk_games.columns:
+        wins_by = gk_games.groupby(['ID player', 'ID team'])['win'].sum().reset_index(name='П')
+        agg = agg.merge(wins_by, on=['ID player', 'ID team'], how='left')
+    else:
+        wins_by = gk_games.groupby(['ID player'])['win'].sum().reset_index(name='П')
+        agg = agg.merge(wins_by, on=['ID player'], how='left')
+    agg['П'] = agg['П'].fillna(0).astype(int)
+
+    # Финальные колонки (база)
+    base_cols = ['ID player', 'ID team'] if include_team_col else ['ID player']
+    result = agg[base_cols + ['%', 'КН', 'СИ', 'П', 'games']].copy()
+    result['%'] = result['%'].round(2)
+    result['КН'] = result['КН'].round(2)
+
+    # Весовые очки для вратарских метрик
+    weights = {
+        '%': 1.0,
+        'КН': 1.0,
+        'СИ': 1.0,
+        'П': 1.0,
+    }
+    if goalie_metric_weights:
+        # ожидаем ключи: '%', 'КН', 'СИ', 'П'
+        for k in list(weights.keys()):
+            if k in goalie_metric_weights:
+                try:
+                    weights[k] = float(goalie_metric_weights[k])
+                except Exception:
+                    pass
+
+    # Преобразование КН (чем меньше, тем лучше) → "чем больше, тем лучше"
+    max_kn = result['КН'].max(skipna=True)
+    if pd.isna(max_kn):
+        max_kn = 0.0
+    kn_eff = (max_kn - result['КН']).clip(lower=0)
+
+    # Очки по метрикам: по аналогии с полевыми ((stat + coef_gk * games)^2) / games с учетом веса
+    g = result['games'].replace(0, np.nan)
+    result['%_о'] = (weights['%'] * ((result['%'] + amplua_weight_gk * g) ** 2) / g).fillna(0.0)
+    result['КН_о'] = (weights['КН'] * ((kn_eff + amplua_weight_gk * g) ** 2) / g).fillna(0.0)
+    result['СИ_о'] = (weights['СИ'] * ((result['СИ'] + amplua_weight_gk * g) ** 2) / g).fillna(0.0)
+    result['П_о'] = (weights['П'] * ((result['П'] + amplua_weight_gk * g) ** 2) / g).fillna(0.0)
+
+    # Итоговый рейтинг
+    result['рейтинг'] = (result['%_о'] + result['КН_о'] + result['СИ_о'] + result['П_о']).round(2)
+
+    # Возвращаем без служебных колонок
+    # Переименуем games в 'И' для вывода
+    result.rename(columns={'games': 'И'}, inplace=True)
+    ordered = base_cols + ['И', '%', 'КН', 'СИ', 'П', '%_о', 'КН_о', 'СИ_о', 'П_о', 'рейтинг']
+    return result[ordered]
 
 @st.cache_data
 def load_data():
@@ -270,7 +414,7 @@ def process_seasons(
          player_ids: list[int] | None,
          coef_def: float,
          coef_att: float,
-          metric_weights: dict[str, float],
+         metric_weights: dict[str, float],
           division_weights: dict[int, float] | None = None,
          output_file: str = r"data/processed/red_method/season_player_stats_with_points.csv"
  ) -> pd.DataFrame:
@@ -642,27 +786,33 @@ def player_rt_red():
     saved = load_saved_weights()
 
     # Постоянные UI-блоки под заголовком
-    coef_def, coef_att = build_amplua_weights_ui(saved.get('amplua'))
+    coef_def, coef_att, coef_gk = build_amplua_weights_ui(saved.get('amplua'))
     metric_weights = build_metric_weights_ui(saved.get('metrics'))
-
+    
     with st.spinner("Загрузка данных..."):
         df_history, df_compile_stats, df_goalk_stats = load_data()
-
+    
     # Объединяем данные, чтобы брать только те сезоны, в которых есть игры из compile_stats
     df_merged = pd.merge(df_compile_stats, df_history, left_on="ID game", right_on="ID", how="inner")
     available_seasons = sorted(df_merged["ID season"].unique())
 
-    # Блок весов дивизионов сразу под заголовком (после загрузки данных)
+    # Блок весов дивизионов + блок весов вратарей (после загрузки данных)
     division_weights = build_division_weights_ui(df_history, saved.get('divisions'))
+    with st.expander("Веса показателей вратарей", expanded=False):
+        goalie_metric_weights = {}
+        for k, label in [('%', '% отраженных'), ('КН', 'КН (меньше — лучше)'), ('СИ', 'Сухие игры'), ('П', 'Победы')]:
+            default_val = float(saved.get('goalie_metrics', {}).get(k, 1.0))
+            goalie_metric_weights[k] = st.slider(f"Вес {label}", 0.0, 5.0, default_val, step=0.01, key=f"gk_w_{k}")
 
     # Кнопка сохранения весов
     if st.button("Сохранить веса"):
-        save_weights((coef_def, coef_att), metric_weights, division_weights)
+        # goalie_metric_weights определен выше при построении блока весов вратарей
+        save_weights((coef_def, coef_att, coef_gk), metric_weights, division_weights, goalie_metric_weights)
         st.success("Веса сохранены и будут подставляться по умолчанию")
-
+    
     action = st.selectbox(
         "Выберите действие",
-        ["Актуальный рейтинг игроков", "Сезонная статистика игроков", "Сезонная статистика команд"]
+        ["Актуальный рейтинг игроков", "Сезонная статистика игроков", "Сезонная статистика команд", "Рейтинг вратарей"]
     )
 
     
@@ -698,29 +848,36 @@ def player_rt_red():
         players_input_10 = st.multiselect("Атакующие", options=players_10, default=players_10[:2])
         players_input = list(players_input_9) + list(players_input_10)
 
-        # Автопересчет при изменении весов
-        # st.button("Рассчитать статистику")
-        if True:
-            # Обработка нескольких сезонов
-            result_df = process_seasons(
-                df_compile_stats,
-                df_history,
-                season_ids,
-                players_input,
-                coef_def,
-                coef_att,
-                metric_weights,
-                division_weights,
-            )
-            fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, ",".join(map(str, season_ids)) or "все сезоны")
-            with st.expander("📉 Графики по показателям", expanded=False):
-                st.pyplot(fig1)
-                st.pyplot(fig2)
-                st.pyplot(fig3)
-                st.pyplot(fig4)
-                st.pyplot(fig5)
-            result_df = rename_columns(result_df)
-            st.dataframe(result_df)
+        # Проверяем, есть ли выбранные сезоны или игроки
+        has_seasons = len(season_ids) > 0
+        has_players = len(players_input) > 0
+        
+        if not has_seasons and not has_players:
+            st.info("⚠️ Выберите хотя бы один сезон или одного игрока для отображения статистики")
+        else:
+            # Автопересчет при изменении весов
+            # st.button("Рассчитать статистику")
+            if True:
+                # Обработка нескольких сезонов
+                result_df = process_seasons(
+                    df_compile_stats,
+                    df_history,
+                    season_ids,
+                    players_input,
+                    coef_def,
+                    coef_att,
+                    metric_weights,
+                    division_weights,
+                )
+                fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, ",".join(map(str, season_ids)) or "все сезоны")
+                with st.expander("📉 Графики по показателям", expanded=False):
+                    st.pyplot(fig1)
+                    st.pyplot(fig2)
+                    st.pyplot(fig3)
+                    st.pyplot(fig4)
+                    st.pyplot(fig5)
+                result_df = rename_columns(result_df)
+                st.dataframe(result_df)
 
     # 3. Визуализация команд
     elif action == "Сезонная статистика команд":
@@ -736,6 +893,7 @@ def player_rt_red():
 
         team_ids = st.multiselect("Выберите команды", available_teams, default=available_teams[:4])
         show_roster = st.checkbox("Отобразить состав команд")
+        include_goalies = st.checkbox("Учитывать вратарей")
 
         # Автопересчет при изменении весов
         # st.button("Построить график")
@@ -743,12 +901,12 @@ def player_rt_red():
             df_players, df_team, \
             fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = \
                 plot_team_ratings(df_compile_stats,
-                                df_history,
-                                season_ids if season_ids else None,
-                                team_ids,
-                                coef_def,
-                                coef_att,
-                                metric_weights,
+                    df_history,
+                    season_ids if season_ids else None,
+                    team_ids,
+                    coef_def,
+                    coef_att,
+                    metric_weights,
                                 division_weights)
             with st.expander("📉 Графики по показателям", expanded=False):
                 st.pyplot(fig_total)
@@ -759,6 +917,29 @@ def player_rt_red():
 
             mapping = {'ID team': 'ID команды', 'team_rating': 'рейтинг', 'division': 'дивизион'}
             df_team = df_team.rename(columns=mapping)
+
+            # Если учитывать вратарей — считаем рейтинг в выбранных сезонах/командах и прибавляем
+            if include_goalies:
+                try:
+                    df_goalkeepers = pd.read_csv(r'data/targeted/goalkeepers_data.csv')
+                except Exception:
+                    df_goalkeepers = pd.read_csv(r'data/raw/goalkeepers_data.csv') if os.path.exists(r'data/raw/goalkeepers_data.csv') else pd.DataFrame()
+
+                allowed_games = set(df_temp['ID game'].dropna().astype(int).unique()) if 'ID game' in df_temp.columns else set()
+                team_list = set(team_ids)
+                gk_table = compute_goalkeepers_ratings(
+                    df_goalkeepers,
+                    goalie_metric_weights=saved.get('goalie_metrics', None),
+                    allowed_game_ids=allowed_games if allowed_games else None,
+                    allowed_team_ids=team_list,
+                    include_team_col=True,
+                    amplua_weight_gk=coef_gk,
+                )
+                gk_team_rating = gk_table.groupby('ID team', as_index=False)['рейтинг'].sum().rename(columns={'рейтинг': 'рейтинг_вратарей'})
+                df_team = df_team.merge(gk_team_rating, left_on='ID команды', right_on='ID team', how='left').drop(columns=['ID team'])
+                df_team['рейтинг_вратарей'] = df_team['рейтинг_вратарей'].fillna(0.0).round(2)
+                df_team['рейтинг'] = (df_team['рейтинг'] + df_team['рейтинг_вратарей']).round(2)
+
             st.dataframe(df_team)
 
             st.session_state['last_df_players'] = df_players
@@ -776,6 +957,12 @@ def player_rt_red():
                 ]
                 for tid in st.session_state['last_team_ids']:
                     st.markdown(f"**Команда ID {tid}**")
+                    if include_goalies and 'gk_table' in locals():
+                        gk_table_team = gk_table[gk_table['ID team'] == tid]
+                        if not gk_table_team.empty:
+                            st.markdown("Вратари (выбранные сезоны):")
+                            gk_table_team = gk_table_team.rename(columns={'ID team': 'ID команды'})
+                            st.dataframe(gk_table_team, use_container_width=True)
                     roster = df_players_all[df_players_all['ID team'] == tid]
                     if roster.empty:
                         st.write("Нет данных по игрокам для этой команды.")
@@ -784,3 +971,24 @@ def player_rt_red():
                         cols = [c for c in expected_cols if c in roster.columns]
                         st.dataframe(roster[cols], use_container_width=True, height=400,
                                     key=f"roster_{tid}")
+
+    # 4. Рейтинг вратарей
+    elif action == "Рейтинг вратарей":
+        # Загружаем данные вратарей
+        # Загружаем целиком без фильтров — должен быть один ряд на игрока (сумма за всё время)
+        try:
+            df_goalkeepers = pd.read_csv(r'data/targeted/goalkeepers_data.csv')
+        except Exception:
+            df_goalkeepers = pd.read_csv(r'data/raw/goalkeepers_data.csv') if os.path.exists(r'data/raw/goalkeepers_data.csv') else pd.DataFrame()
+
+        # Без ограничений по играм и командам и без колонки команды: суммарно за всё время
+        gk_table = compute_goalkeepers_ratings(
+            df_goalkeepers,
+            goalie_metric_weights=goalie_metric_weights,
+            allowed_game_ids=None,
+            allowed_team_ids=None,
+            include_team_col=False,
+            amplua_weight_gk=coef_gk,
+        )
+        st.subheader("Рейтинг вратарей (красный метод)")
+        st.dataframe(gk_table, use_container_width=True)
