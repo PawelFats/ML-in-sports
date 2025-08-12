@@ -25,8 +25,8 @@ def build_division_weights_ui(df_history: pd.DataFrame) -> dict[int, float]:
 def build_amplua_weights_ui() -> tuple[float, float]:
     """UI блок с весами амплуа (можно скрыть/раскрыть)."""
     with st.expander("Веса амплуа", expanded=False):
-        coef_def = st.slider("Вес защитников", 0.0, 3.0, 1.0, step=0.01)
-        coef_att = st.slider("Вес нападающих", 0.0, 3.0, 1.0, step=0.01)
+        coef_def = st.slider("Вес защитников", 0.0, 3.0, 1.0, step=0.1)
+        coef_att = st.slider("Вес нападающих", 0.0, 3.0, 1.0, step=0.1)
     return coef_def, coef_att
 
 def build_metric_weights_ui() -> dict[str, float]:
@@ -53,7 +53,7 @@ def build_metric_weights_ui() -> dict[str, float]:
                 'p_m': 'п/м',
             }.get(metric, metric)
             weights[metric] = st.slider(
-                f"Вес {label_ru}", 0.0, 3.0, float(defaults.get(metric, 1.0)), step=0.01, key=f"m_w_{metric}"
+                f"Вес {label_ru}", 0.0, 3.0, float(defaults.get(metric, 1.0)), step=0.1, key=f"m_w_{metric}"
             )
     return weights
 
