@@ -925,16 +925,32 @@ def player_rt_red():
                 except Exception:
                     df_goalkeepers = pd.read_csv(r'data/raw/goalkeepers_data.csv') if os.path.exists(r'data/raw/goalkeepers_data.csv') else pd.DataFrame()
 
-                allowed_games = set(df_temp['ID game'].dropna().astype(int).unique()) if 'ID game' in df_temp.columns else set()
-                team_list = set(team_ids)
-                gk_table = compute_goalkeepers_ratings(
-                    df_goalkeepers,
-                    goalie_metric_weights=saved.get('goalie_metrics', None),
-                    allowed_game_ids=allowed_games if allowed_games else None,
-                    allowed_team_ids=team_list,
-                    include_team_col=True,
-                    amplua_weight_gk=coef_gk,
-                )
+                # Логика для вратарей:
+                # - Если сезон выбран: фильтруем по играм этого сезона
+                # - Если сезон НЕ выбран: показываем за все время (как для полевых игроков)
+                if season_ids:
+                    # Сезон выбран - фильтруем по играм выбранного сезона
+                    allowed_games = set(df_temp['ID game'].dropna().astype(int).unique()) if 'ID game' in df_temp.columns else set()
+                    team_list = set(team_ids)
+                    gk_table = compute_goalkeepers_ratings(
+                        df_goalkeepers,
+                        goalie_metric_weights=saved.get('goalie_metrics', None),
+                        allowed_game_ids=allowed_games if allowed_games else None,
+                        allowed_team_ids=team_list,
+                        include_team_col=True,
+                        amplua_weight_gk=coef_gk,
+                    )
+                else:
+                    # Сезон НЕ выбран - показываем вратарей за все время, но только выбранных команд
+                    team_list = set(team_ids)
+                    gk_table = compute_goalkeepers_ratings(
+                        df_goalkeepers,
+                        goalie_metric_weights=saved.get('goalie_metrics', None),
+                        allowed_game_ids=None,  # Все игры
+                        allowed_team_ids=team_list,
+                        include_team_col=True,
+                        amplua_weight_gk=coef_gk,
+                    )
                 gk_team_rating = gk_table.groupby('ID team', as_index=False)['рейтинг'].sum().rename(columns={'рейтинг': 'рейтинг_вратарей'})
                 df_team = df_team.merge(gk_team_rating, left_on='ID команды', right_on='ID team', how='left').drop(columns=['ID team'])
                 df_team['рейтинг_вратарей'] = df_team['рейтинг_вратарей'].fillna(0.0).round(2)
@@ -960,8 +976,13 @@ def player_rt_red():
                     if include_goalies and 'gk_table' in locals():
                         gk_table_team = gk_table[gk_table['ID team'] == tid]
                         if not gk_table_team.empty:
-                            st.markdown("Вратари (выбранные сезоны):")
-                            gk_table_team = gk_table_team.rename(columns={'ID team': 'ID команды'})
+                            if season_ids:
+                                st.markdown("Вратари (выбранные сезоны):")
+                            else:
+                                st.markdown("Вратари (за все время):")
+                            # Переименовываем ID player в ID игрока и убираем колонку ID команды
+                            gk_table_team = gk_table_team.rename(columns={'ID player': 'ID игрока'})
+                            gk_table_team = gk_table_team.drop(columns=['ID team'])
                             st.dataframe(gk_table_team, use_container_width=True)
                     roster = df_players_all[df_players_all['ID team'] == tid]
                     if roster.empty:
