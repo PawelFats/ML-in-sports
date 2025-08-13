@@ -926,23 +926,102 @@ def player_rt_red():
                     df_goalkeepers = pd.read_csv(r'data/raw/goalkeepers_data.csv') if os.path.exists(r'data/raw/goalkeepers_data.csv') else pd.DataFrame()
 
                 # Логика для вратарей:
-                # - Если сезон выбран: фильтруем по играм этого сезона
-                # - Если сезон НЕ выбран: показываем за все время (как для полевых игроков)
+                # - Если сезон выбран: считаем только по играм выбранного сезона для выбранных команд
+                # - Если сезон НЕ выбран: считаем за всё время, но только для выбранных команд
                 if season_ids:
-                    # Сезон выбран - фильтруем по играм выбранного сезона
-                    allowed_games = set(df_temp['ID game'].dropna().astype(int).unique()) if 'ID game' in df_temp.columns else set()
-                    team_list = set(team_ids)
+                    # Получаем список игр для выбранных сезонов и выбранных команд из game_history
+                    allowed_games = set()
+                    hist = df_history.copy()
+                    try:
+                        if isinstance(season_ids, (list, tuple)):
+                            hist = hist[hist['ID season'].isin([int(s) for s in season_ids])]
+                        else:
+                            hist = hist[hist['ID season'] == int(season_ids)]
+                    except Exception:
+                        pass
+                    if team_ids and {'ID firstTeam','ID secondTeam','ID'}.issubset(hist.columns):
+                        # Приведём типы к числу перед фильтром по командам
+                        try:
+                            hist['ID firstTeam'] = pd.to_numeric(hist['ID firstTeam'], errors='coerce')
+                            hist['ID secondTeam'] = pd.to_numeric(hist['ID secondTeam'], errors='coerce')
+                        except Exception:
+                            pass
+                        hist = hist[(hist['ID firstTeam'].isin(team_ids)) | (hist['ID secondTeam'].isin(team_ids))]
+                    if 'ID' in hist.columns:
+                        # ВАЖНО: compile_stats['ID game'] соответствует game_history['ID']
+                        allowed_games = set(pd.to_numeric(hist['ID'], errors='coerce').dropna().astype(int).unique())
+                    team_list = set(team_ids) if team_ids else None
+
+                    # Отладочная информация для вратарей (выбран сезон)
+                    with st.expander("Отладка вратарей", expanded=True):
+                        st.write({
+                            'selected_seasons': season_ids,
+                            'selected_teams': sorted(list(team_list)),
+                            'num_allowed_games': len(allowed_games),
+                            'allowed_games_source': 'game_history.ID'
+                        })
+                        # Диагностика пересечения игр
+                        gk_games_all = pd.to_numeric(df_goalkeepers.get('ID game', pd.Series(dtype=float)), errors='coerce').dropna().astype(int)
+                        st.write({
+                            'goalkeepers_unique_games_total': int(gk_games_all.nunique())
+                        })
+                        intersect_games = set(gk_games_all.unique()) & set(allowed_games)
+                        st.write({
+                            'intersection_games_count': len(intersect_games)
+                        })
+                        st.caption("Пример ID игр (allowed vs in_goalkeepers vs intersection)")
+                        st.write({
+                            'allowed_sample': list(sorted(list(allowed_games)))[:20],
+                            'gk_games_sample': list(sorted(list(set(gk_games_all.unique()))))[:20],
+                            'intersection_sample': list(sorted(list(intersect_games)))[:20]
+                        })
+                        # Сырые строки вратарей после фильтра
+                        df_gk_debug = df_goalkeepers.copy()
+                        # Приводим типы
+                        df_gk_debug['ID game'] = pd.to_numeric(df_gk_debug['ID game'], errors='coerce')
+                        if allowed_games:
+                            df_gk_debug = df_gk_debug[df_gk_debug['ID game'].isin(list(allowed_games))]
+                        if team_list:
+                            df_gk_debug = df_gk_debug[df_gk_debug['ID team'].isin(list(team_list))]
+                        # Выводим ключевые колонки в начале
+                        debug_cols = [c for c in ['ID game','ID team','ID player'] if c in df_gk_debug.columns]
+                        other_cols = [c for c in df_gk_debug.columns if c not in debug_cols]
+                        if debug_cols:
+                            df_gk_debug = df_gk_debug[debug_cols + other_cols]
+                        st.markdown("Строки вратарей после фильтра по сезону и командам:")
+                        st.dataframe(df_gk_debug, use_container_width=True)
                     gk_table = compute_goalkeepers_ratings(
                         df_goalkeepers,
                         goalie_metric_weights=saved.get('goalie_metrics', None),
-                        allowed_game_ids=allowed_games if allowed_games else None,
+                        allowed_game_ids=allowed_games,  # строго фильтруем по играм выбранного сезона
                         allowed_team_ids=team_list,
                         include_team_col=True,
                         amplua_weight_gk=coef_gk,
                     )
                 else:
                     # Сезон НЕ выбран - показываем вратарей за все время, но только выбранных команд
-                    team_list = set(team_ids)
+                    team_list = set(team_ids) if team_ids else None
+
+                    # Отладочная информация для вратарей (сезон не выбран)
+                    with st.expander("Отладка вратарей", expanded=True):
+                        st.write({
+                            'selected_seasons': None,
+                            'selected_teams': sorted(list(team_list)),
+                            'num_allowed_games': 'all'
+                        })
+                        gk_games_all = pd.to_numeric(df_goalkeepers.get('ID game', pd.Series(dtype=float)), errors='coerce').dropna().astype(int)
+                        st.write({
+                            'goalkeepers_unique_games_total': int(gk_games_all.nunique())
+                        })
+                        df_gk_debug = df_goalkeepers.copy()
+                        if team_list:
+                            df_gk_debug = df_gk_debug[df_gk_debug['ID team'].isin(list(team_list))]
+                        debug_cols = [c for c in ['ID game','ID team','ID player'] if c in df_gk_debug.columns]
+                        other_cols = [c for c in df_gk_debug.columns if c not in debug_cols]
+                        if debug_cols:
+                            df_gk_debug = df_gk_debug[debug_cols + other_cols]
+                        st.markdown("Строки вратарей после фильтра по командам (все игры):")
+                        st.dataframe(df_gk_debug, use_container_width=True)
                     gk_table = compute_goalkeepers_ratings(
                         df_goalkeepers,
                         goalie_metric_weights=saved.get('goalie_metrics', None),
