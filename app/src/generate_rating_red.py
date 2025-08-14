@@ -582,6 +582,124 @@ def plot_player_ratings(result_df, season_id):
     # Возвращаем все созданные фигуры
     return fig1, fig2, fig3, fig4, fig5
 
+def plot_goalkeeper_ratings(result_df: pd.DataFrame, season_id):
+    """
+    Аналог графиков для полевых, но для вратарей.
+    Используются метрики: '%_о', 'КН_о', 'СИ_о', 'П_о' и итог 'рейтинг'.
+    Ожидаются колонки: ['ID player', 'И', '%_о', 'КН_о', 'СИ_о', 'П_о', 'рейтинг'].
+    """
+    metric_labels = {
+        '%_о': '%',
+        'КН_о': 'КН',
+        'СИ_о': 'Сухие',
+        'П_о': 'Победы',
+    }
+    metrics = list(metric_labels.keys())
+
+    players = result_df['ID player'].astype(str) if not result_df.empty else pd.Series([], dtype=str)
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+
+    # 1. Составной столбчатый график (в процентах от рейтинга)
+    df_percent = result_df.copy()
+    with np.errstate(divide='ignore', invalid='ignore'):
+        for metric in metrics:
+            df_percent[metric] = (df_percent[metric] / df_percent['рейтинг']) * 100
+
+    fig1, ax1 = plt.subplots(figsize=(14, 8))
+    bottom = np.zeros(len(df_percent))
+    for i, m in enumerate(metrics):
+        ax1.bar(players, df_percent[m], bottom=bottom, color=colors[i % len(colors)], label=metric_labels[m])
+        bottom += df_percent[m].values if not df_percent.empty else 0
+    ax1.set_xlabel('ID игрока')
+    ax1.set_ylabel('Процент от рейтинга')
+    ax1.set_title(f'Вратари: структура рейтингов по показателям за сезон {season_id}')
+    ax1.legend(title='Показатели', bbox_to_anchor=(1, 1), loc='upper left')
+    plt.xticks(rotation=45)
+
+    # 2. Количество игр
+    fig2, ax2 = plt.subplots(figsize=(14, 6))
+    games_col = 'И' if 'И' in result_df.columns else 'games'
+    ax2.bar(players, result_df[games_col] if games_col in result_df.columns else 0, color='skyblue')
+    ax2.set_xlabel('ID игрока')
+    ax2.set_ylabel('Количество игр')
+    ax2.set_title(f'Вратари: количество игр за сезон {season_id}')
+    plt.xticks(rotation=45)
+
+    # 3. Тепловая карта метрик
+    fig3, ax3 = plt.subplots(figsize=(14, 10))
+    if not result_df.empty:
+        heatmap_data = result_df.set_index('ID player')[metrics].rename(columns=metric_labels)
+    else:
+        heatmap_data = pd.DataFrame(columns=list(metric_labels.values()))
+    sns.heatmap(
+        heatmap_data,
+        annot=True,
+        fmt=".1f",
+        cmap="coolwarm",
+        linewidths=0.5,
+        linecolor="white",
+        cbar_kws={'label': 'Рейтинговые очки'},
+        ax=ax3
+    )
+    ax3.set_title(f'Вратари: тепловая карта показателей за сезон {season_id}\n', fontsize=16, pad=20)
+    ax3.set_xlabel('Показатели', fontsize=12)
+    ax3.set_ylabel('ID игрока', fontsize=12)
+
+    # 4. Группированный бар-чарт по метрикам
+    fig4, ax4 = plt.subplots(figsize=(16, 8))
+    melted_df = result_df.melt(
+        id_vars=['ID player', 'И'] if 'И' in result_df.columns else ['ID player'],
+        value_vars=metrics,
+        var_name='Metric',
+        value_name='Value'
+    ) if not result_df.empty else pd.DataFrame(columns=['ID player', 'Metric', 'Value'])
+    if not melted_df.empty:
+        melted_df['Metric'] = melted_df['Metric'].map(metric_labels)
+        sns.barplot(
+            x='ID player',
+            y='Value',
+            hue='Metric',
+            data=melted_df,
+            palette=colors,
+            edgecolor='w',
+            ax=ax4
+        )
+    ax4.set_title(f'Вратари: распределение показателей (сезон {season_id})', fontsize=16)
+    ax4.set_xlabel('ID игрока', fontsize=12)
+    ax4.set_ylabel('Рейтинговые очки', fontsize=12)
+    ax4.tick_params(axis='x', rotation=45)
+    ax4.legend(title='Показатели', bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax4.grid(axis='y', alpha=0.3)
+
+    # 5. Радарная диаграмма (топ-5 по рейтингу)
+    top_players = result_df.nlargest(5, 'рейтинг') if not result_df.empty else result_df
+    labels = list(metric_labels.values())
+    num_metrics = len(labels)
+    angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
+    angles += angles[:1]
+
+    fig5, ax5 = plt.subplots(subplot_kw={'polar': True}, figsize=(10, 10))
+    radar_colors = sns.color_palette("husl", 5)
+    top_players = top_players.reset_index(drop=True)
+    for i, (_, row) in enumerate(top_players.iterrows()):
+        values = row[metrics].tolist()
+        values += values[:1]
+        ax5.plot(angles, values, color=radar_colors[i % len(radar_colors)], linewidth=2,
+                 label=f"ID {row['ID player']} (Σ={row['рейтинг']:.1f})")
+        ax5.fill(angles, values, color=radar_colors[i % len(radar_colors)], alpha=0.1)
+    ax5.set_theta_offset(np.pi / 2)
+    ax5.set_theta_direction(-1)
+    ax5.set_rlabel_position(30)
+    ax5.set_xticks(angles[:-1])
+    ax5.set_xticklabels(labels, fontsize=10)
+    ax5.tick_params(axis='y', labelsize=8)
+    ax5.set_title('Вратари: топ-5 по суммарному рейтингу\n', fontsize=16, pad=40)
+    ax5.legend(loc='upper right', bbox_to_anchor=(1.4, 1.1), fontsize=10, frameon=True, shadow=True)
+    ax5.spines['polar'].set_visible(False)
+    ax5.grid(alpha=0.5, linestyle='--')
+
+    return fig1, fig2, fig3, fig4, fig5
+
 def plot_team_ratings(
          df_compile: pd.DataFrame,
          df_history: pd.DataFrame,
@@ -842,10 +960,16 @@ def player_rt_red():
         # Уникальные игроки по амплуа
         players_9 = df_filtered[df_filtered["amplua"] == 9]["ID player"].unique()
         players_10 = df_filtered[df_filtered["amplua"] == 10]["ID player"].unique()
+        # Для выбора вратарей учитываем выбранные сезоны, но не исключаем амплуа 8
+        df_for_gk_pick = df_merged.copy()
+        if season_ids:
+            df_for_gk_pick = df_for_gk_pick[df_for_gk_pick["ID season"].isin(season_ids)]
+        players_8 = df_for_gk_pick[df_for_gk_pick["amplua"] == 8]["ID player"].unique()
 
         st.write("Выберите игроков или оставьте поля пустыми:")
         players_input_9 = st.multiselect("Защитники", options=players_9, default=players_9[:2])
         players_input_10 = st.multiselect("Атакующие", options=players_10, default=players_10[:2])
+        players_input_gk = st.multiselect("Вратари", options=players_8, default=players_8[:2])
         players_input = list(players_input_9) + list(players_input_10)
 
         # Проверяем, есть ли выбранные сезоны или игроки
@@ -878,6 +1002,53 @@ def player_rt_red():
                     st.pyplot(fig5)
                 result_df = rename_columns(result_df)
                 st.dataframe(result_df)
+
+                # Если выбраны вратари — строим аналогичные графики и таблицу для вратарей
+                if len(players_input_gk) > 0:
+                    # Определяем список игр по выбранным сезонам (если есть)
+                    if season_ids:
+                        hist = df_history.copy()
+                        try:
+                            if isinstance(season_ids, (list, tuple)):
+                                hist = hist[hist['ID season'].isin([int(s) for s in season_ids])]
+                            else:
+                                hist = hist[hist['ID season'] == int(season_ids)]
+                        except Exception:
+                            pass
+                        if 'ID' in hist.columns:
+                            allowed_games = set(pd.to_numeric(hist['ID'], errors='coerce').dropna().astype(int).unique())
+                        else:
+                            allowed_games = None
+                    else:
+                        allowed_games = None
+
+                    # Берём данные вратарей из уже загруженного датасета
+                    df_goalkeepers = df_goalk_stats.copy() if 'df_goalk_stats' in locals() else pd.DataFrame()
+                    # Считаем рейтинг вратарей c фильтром по играм (сезоны) без команды
+                    gk_table = compute_goalkeepers_ratings(
+                        df_goalkeepers,
+                        goalie_metric_weights=goalie_metric_weights,
+                        allowed_game_ids=allowed_games,
+                        allowed_team_ids=None,
+                        include_team_col=False,
+                        amplua_weight_gk=coef_gk,
+                    )
+                    # Фильтруем по выбранным вратарям
+                    gk_table = gk_table[gk_table['ID player'].isin(players_input_gk)]
+
+                    # Графики
+                    fig_gk1, fig_gk2, fig_gk3, fig_gk4, fig_gk5 = plot_goalkeeper_ratings(gk_table, ",".join(map(str, season_ids)) or "все сезоны")
+                    with st.expander("📉 Графики по показателям — вратари", expanded=False):
+                        st.pyplot(fig_gk1)
+                        st.pyplot(fig_gk2)
+                        st.pyplot(fig_gk3)
+                        st.pyplot(fig_gk4)
+                        st.pyplot(fig_gk5)
+
+                    # Таблица для вратарей (переименуем ID)
+                    gk_table_view = gk_table.rename(columns={'ID player': 'ID игрока'})
+                    st.subheader("Таблица: Вратари")
+                    st.dataframe(gk_table_view, use_container_width=True)
 
     # 3. Визуализация команд
     elif action == "Сезонная статистика команд":
