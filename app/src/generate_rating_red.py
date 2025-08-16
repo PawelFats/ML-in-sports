@@ -438,16 +438,16 @@ def process_seasons(
     if player_ids:
         df_season = df_season[df_season["ID player"].isin([int(pid) for pid in player_ids])]
 
-    unique_games = df_season['ID game'].nunique()
-    unique_teams = df_season['ID team'].nunique()
-    unique_players = df_season.groupby('amplua')['ID player'].nunique()
+    # unique_games = df_season['ID game'].nunique()
+    # unique_teams = df_season['ID team'].nunique()
+    # unique_players = df_season.groupby('amplua')['ID player'].nunique()
 
-    st.write(f"Уникальных игр в выбранных сезонах: {unique_games}")
-    st.write(f"Уникальных команд в выбранных сезонах: {unique_teams}")
-    st.write("Уникальных игроков по амплуа:")
-    for amp, cnt in unique_players.items():
-        label = {8:'Вратари',9:'Защитники',10:'Атакующие'}.get(amp, amp)
-        st.write(f"  {label}: {cnt}")
+    # st.write(f"Уникальных игр в выбранных сезонах: {unique_games}")
+    # st.write(f"Уникальных команд в выбранных сезонах: {unique_teams}")
+    # st.write("Уникальных игроков по амплуа:")
+    # for amp, cnt in unique_players.items():
+    #     label = {8:'Вратари',9:'Защитники',10:'Атакующие'}.get(amp, amp)
+    #     st.write(f"  {label}: {cnt}")
 
     # Запускаем перерасчёт с пользовательскими весами
     df_final = process_and_save(
@@ -947,7 +947,6 @@ def player_rt_red():
         st.dataframe(stats)
 
     
-    # 2. Статистика за сезоны
     elif action == "Сезонная статистика игроков":
         # Мультивыбор сезонов
         season_ids = st.multiselect("Выберите сезоны", options=available_seasons, default=available_seasons[:2])
@@ -970,41 +969,55 @@ def player_rt_red():
         players_input_9 = st.multiselect("Защитники", options=players_9, default=players_9[:2])
         players_input_10 = st.multiselect("Атакующие", options=players_10, default=players_10[:2])
         players_input_gk = st.multiselect("Вратари", options=players_8, default=players_8[:2])
-        players_input = list(players_input_9) + list(players_input_10)
+
+        # Разделяем полевых и вратарей (важно!)
+        field_players = list(players_input_9) + list(players_input_10)
+        goalies = list(players_input_gk)
 
         # Проверяем, есть ли выбранные сезоны или игроки
         has_seasons = len(season_ids) > 0
-        has_players = len(players_input) > 0
+        has_field_players = len(field_players) > 0
+        has_goalies = len(goalies) > 0
         
-        if not has_seasons and not has_players:
-            st.info("⚠️ Выберите хотя бы один сезон или одного игрока для отображения статистики")
-        else:
-            # Автопересчет при изменении весов
-            # st.button("Рассчитать статистику")
-            if True:
-                # Обработка нескольких сезонов
-                result_df = process_seasons(
-                    df_compile_stats,
-                    df_history,
-                    season_ids,
-                    players_input,
-                    coef_def,
-                    coef_att,
-                    metric_weights,
-                    division_weights,
-                )
-                fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, ",".join(map(str, season_ids)) or "все сезоны")
-                with st.expander("📉 Графики по показателям", expanded=False):
-                    st.pyplot(fig1)
-                    st.pyplot(fig2)
-                    st.pyplot(fig3)
-                    st.pyplot(fig4)
-                    st.pyplot(fig5)
-                result_df = rename_columns(result_df)
-                st.dataframe(result_df)
+        # Кнопка для запуска расчёта
+        if st.button("Рассчитать рейтинг"):
+            if not (has_seasons or has_field_players or has_goalies):
+                st.info("⚠️ Выберите хотя бы одного игрока для отображения статистики")
+            else:
+                # 1) Полевая часть — считаем только если выбраны полевые или сезоны
+                result_df = pd.DataFrame()
+                if has_field_players:
+                    result_df = process_seasons(
+                        df_compile_stats,
+                        df_history,
+                        season_ids,
+                        field_players,          # <- передаём только полевых
+                        coef_def,
+                        coef_att,
+                        metric_weights,
+                        division_weights,
+                    )
 
-                # Если выбраны вратари — строим аналогичные графики и таблицу для вратарей
-                if len(players_input_gk) > 0:
+                    # === показываем графики полевых только если есть пригодные данные ===
+                    if (not result_df.empty) and ('player_rating' in result_df.columns) and result_df['player_rating'].replace(0, np.nan).notna().any():
+                        fig1, fig2, fig3, fig4, fig5 = plot_player_ratings(result_df, ",".join(map(str, season_ids)) or "все сезоны")
+                        with st.expander("📉 Графики по показателям - полевые игроки", expanded=False):
+                            st.pyplot(fig1)
+                            st.pyplot(fig2)
+                            st.pyplot(fig3)
+                            st.pyplot(fig4)
+                            st.pyplot(fig5)
+                    else:
+                        # Показываем предупреждение только если пытались считать полевых
+                        if has_field_players or has_seasons:
+                            st.warning("Нет данных для построения графиков полевых игроков — результат пустой или все рейтинги равны 0/NaN.")
+
+                    result_df = rename_columns(result_df)
+                    st.subheader("Таблица: Полевые игроки")
+                    st.dataframe(result_df)
+
+                # 2) Вратари — считаем и показываем вне зависимости от того, считали ли полевых
+                if has_goalies:
                     # Определяем список игр по выбранным сезонам (если есть)
                     if season_ids:
                         hist = df_history.copy()
@@ -1034,16 +1047,21 @@ def player_rt_red():
                         amplua_weight_gk=coef_gk,
                     )
                     # Фильтруем по выбранным вратарям
-                    gk_table = gk_table[gk_table['ID player'].isin(players_input_gk)]
+                    gk_table = gk_table[gk_table['ID player'].isin(goalies)]
 
-                    # Графики
-                    fig_gk1, fig_gk2, fig_gk3, fig_gk4, fig_gk5 = plot_goalkeeper_ratings(gk_table, ",".join(map(str, season_ids)) or "все сезоны")
-                    with st.expander("📉 Графики по показателям — вратари", expanded=False):
-                        st.pyplot(fig_gk1)
-                        st.pyplot(fig_gk2)
-                        st.pyplot(fig_gk3)
-                        st.pyplot(fig_gk4)
-                        st.pyplot(fig_gk5)
+                    # === Защита: вызываем plot_goalkeeper_ratings только если есть пригодные данные ===
+                    if (not gk_table.empty) and ('рейтинг' in gk_table.columns) and gk_table['рейтинг'].replace(0, np.nan).notna().any():
+                        fig_gk1, fig_gk2, fig_gk3, fig_gk4, fig_gk5 = plot_goalkeeper_ratings(
+                            gk_table, ",".join(map(str, season_ids)) or "все сезоны"
+                        )
+                        with st.expander("📉 Графики по показателям — вратари", expanded=False):
+                            st.pyplot(fig_gk1)
+                            st.pyplot(fig_gk2)
+                            st.pyplot(fig_gk3)
+                            st.pyplot(fig_gk4)
+                            st.pyplot(fig_gk5)
+                    else:
+                        st.warning("Нет данных для построения графиков вратарей — таблица пуста или все рейтинги равны 0/NaN.")
 
                     # Таблица для вратарей (переименуем ID)
                     gk_table_view = gk_table.rename(columns={'ID player': 'ID игрока'})
@@ -1066,9 +1084,7 @@ def player_rt_red():
         show_roster = st.checkbox("Отобразить состав команд")
         include_goalies = st.checkbox("Учитывать вратарей")
 
-        # Автопересчет при изменении весов
-        # st.button("Построить график")
-        if True:
+        if st.button("Построить график"):
             df_players, df_team, \
             fig_total, fig_stacked, fig_scatter, fig_metric, fig_radar = \
                 plot_team_ratings(df_compile_stats,
