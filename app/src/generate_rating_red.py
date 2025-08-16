@@ -337,7 +337,8 @@ def calculate_points(df: pd.DataFrame,
 
     # Расчёт взвешенных p_метрик
     for col in METRICS:
-        raw = ((df_filtered[col] + coefficient * df_filtered['games']) ** 2) / df_filtered['games']
+        # raw = ((df_filtered[col] + coefficient * df_filtered['games']) ** 2) / df_filtered['games']
+        raw = (np.sign(df_filtered[col]) * ((np.abs(df_filtered[col]) + coefficient * df_filtered['games']) ** 2) / df_filtered['games'].replace(0, np.nan)).fillna(0.0)
         weight = metric_weights.get(col, 1.0)
         df_filtered[f'p_{col}'] = weight * raw
 
@@ -483,20 +484,65 @@ def plot_player_ratings(result_df, season_id):
     # 1. График: Составной столбчатый график (stacked bar chart) рейтингов в процентах
     # Рассчитываем процентное соотношение каждого показателя
     result_df_percent = result_df.copy()
+    mask_zero = result_df_percent['player_rating'] <= 0
+    if mask_zero.any():
+        # чтобы не было деления на ноль — присвоим нули (или NaN по желанию)
+        result_df_percent.loc[mask_zero, metrics] = 0
+        result_df_percent.loc[mask_zero, 'player_rating'] = 1  # чтобы безопасно делить дальше
 
     for metric in metrics:
         result_df_percent[metric] = (result_df_percent[metric] / result_df_percent['player_rating']) * 100
 
-    fig1, ax1 = plt.subplots(figsize=(14,8))
-    bottom = np.zeros(len(result_df_percent))
+    # разделяем положительные и отрицательные части
+    pos_df = result_df_percent[metrics].clip(lower=0)
+    neg_df = result_df_percent[metrics].clip(upper=0)   # отрицательные (<=0)
+
+    # масштабируем положительные части по строкам, чтобы их сумма не превышала 100%
+    sum_pos = pos_df.sum(axis=1).values  # сумма положительных вкладов по игроку
+    scale = np.ones(len(sum_pos))
+    over_idx = sum_pos > 100
+    scale[over_idx] = 100.0 / sum_pos[over_idx]  # уменьшаем так, чтобы сумма стала 100
+    # применяем масштаб (по строкам)
+    pos_df = pos_df.mul(scale, axis=0)
+
+    # подготовка к рисованию
+    x = np.arange(len(players))
+    fig1, ax = plt.subplots(figsize=(14, 8))
+
+    # рисуем положительные части (стек сверху от 0)
+    bottom_pos = np.zeros(len(players))
     for i, metric in enumerate(metrics):
-        ax1.bar(players, result_df_percent[metric], bottom=bottom, color=colors[i], label=metric_labels[metric])
-        bottom += result_df_percent[metric].values
-    ax1.set_xlabel('ID игрока')
-    ax1.set_ylabel('Рейтинговые очки')
-    ax1.set_title(f'Структура рейтингов по показателям за сезон {season_id}')
-    ax1.legend(title='Показатели', bbox_to_anchor=(1, 1), loc='upper left')
-    plt.xticks(rotation=45)
+        vals = pos_df[metric].values
+        ax.bar(x, vals, bottom=bottom_pos, color=colors[i], label=metric_labels.get(metric, metric))
+        bottom_pos = bottom_pos + vals
+
+    # рисуем отрицательные части (стек вниз от 0)
+    # используем тот же порядок или поменяем на обратный — зависит от желаемого визуального стека
+    bottom_neg = np.zeros(len(players))
+    for i, metric in enumerate(metrics):
+        vals = neg_df[metric].values  # отрицательные значения (например -20)
+        # hatch/alpha для визуального отличия отрицательных вкладов
+        ax.bar(x, vals, bottom=bottom_neg, color=colors[i], hatch='////', alpha=0.9)
+        bottom_neg = bottom_neg + vals  # станет более отрицательным, следующий бар опустится дальше вниз
+
+    # подписываем график
+    ax.set_xticks(x)
+    ax.set_xticklabels(players, rotation=45)
+    ax.set_xlabel('ID игрока')
+    ax.set_ylabel('Процент от общего рейтинга (%)')
+    ax.set_title(f'Структура рейтингов по показателям за сезон {season_id}')
+
+    # легенда: уникальные метрики (без дублирования)
+    handles, labels = ax.get_legend_handles_labels()
+    # иногда отрицательные и положительные дали дубликаты — сделаем уникальные по метке
+    unique = dict(zip(labels, handles))
+    ax.legend(unique.values(), unique.keys(), title='Показатели', bbox_to_anchor=(1, 1), loc='upper left')
+
+    # опционально: горизонтальная линия 100% чтобы видеть верхнюю границу
+    ax.axhline(100, color='k', linestyle='--', linewidth=0.7, alpha=0.5)
+
+    plt.tight_layout()
+    plt.show()
     
     # График 2: количество игр
     fig2, ax2 = plt.subplots(figsize=(14,6))
@@ -822,8 +868,7 @@ def plot_team_ratings(
     
     plt.tight_layout()
     
-    # 4. Составной бар-чарт с процентным соотношением вклада показателей в общий рейтинг команды
-    # Определяем метрики и их подписи
+
     metric_labels = {
         'p_goals': 'голы',
         'p_assists': 'ассисты',
@@ -834,43 +879,90 @@ def plot_team_ratings(
         'p_p_m': 'п/м'
     }
     metrics = list(metric_labels.keys())
-    
-    # Группируем данные по командам для суммирования метрик
+
+    # Группируем по командам (суммируем показатели игроков)
     df_team_metrics = df_players.groupby('ID team')[metrics].sum().reset_index()
-    # Рассчитываем общую сумму метрик для каждой команды
+
+    # Рассчитываем общую сумму метрик для каждой команды (тот же подход, что у тебя)
     df_team_metrics['total'] = df_team_metrics[metrics].sum(axis=1)
-    # Переводим каждую метрику в проценты от общего рейтинга
+
+    # Защита от total <= 0: оставляем метрики как 0% (можно поменять логику при желании)
+    mask_nonpositive_total = df_team_metrics['total'] <= 0
+    if mask_nonpositive_total.any():
+        # Если total <= 0 — безопасно заполняем нулями, чтобы избежать деления на ноль / странных процентов.
+        df_team_metrics.loc[mask_nonpositive_total, metrics] = 0
+        # Чтобы последующее вычисление не делило на 0, делаем total = 1 (влияет только на вычисления процентов, реальные значения сохранены в df_team_metrics до этого шага)
+        df_team_metrics.loc[mask_nonpositive_total, 'total'] = 1
+
+    # Переводим каждую метрику в проценты от общего (как было в оригинале)
     for metric in metrics:
         df_team_metrics[metric] = df_team_metrics[metric] / df_team_metrics['total'] * 100
-    
-    # Добавляем информацию о дивизионе
+
+    # Разделяем на положительные и отрицательные вклады
+    pos_df = df_team_metrics[metrics].clip(lower=0)
+    neg_df = df_team_metrics[metrics].clip(upper=0)  # отрицательные значения (<=0)
+
+    # Масштабируем положительные по строкам, чтобы сумма положительных вкладов ≤ 100%
+    sum_pos = pos_df.sum(axis=1).values  # сумма положительных вкладов по команде
+    scale = np.ones(len(sum_pos))
+    over_idx = sum_pos > 100
+    # только для тех строк, где sum_pos > 100 — уменьшаем пропорционально
+    if over_idx.any():
+        scale[over_idx] = 100.0 / sum_pos[over_idx]
+    pos_df = pos_df.mul(scale, axis=0)
+
+    # Подготовка подписей команд (как у тебя)
     df_team_metrics = pd.merge(df_team_metrics, divs, on='ID team', how='left')
     team_labels_metric = df_team_metrics['ID team'].astype(str) + ' (Div ' + df_team_metrics['division'].astype(str) + ')'
-    
-    fig_metric, ax_metric = plt.subplots(figsize=(12, 7))
-    bottom = np.zeros(len(df_team_metrics))
+
+    # Цвета
     colors_metric = {
-    'p_goals': '#1f77b4',
-    'p_assists': '#ff7f0e',
-    'p_assists_2': '#2ca02c',
-    'p_throws_by': '#d62728',
-    'p_shot_on_target': '#9467bd',
-    'p_blocked_throws': '#8c564b',
-    'p_p_m': '#e377c2'
+        'p_goals': '#1f77b4',
+        'p_assists': '#ff7f0e',
+        'p_assists_2': '#2ca02c',
+        'p_throws_by': '#d62728',
+        'p_shot_on_target': '#9467bd',
+        'p_blocked_throws': '#8c564b',
+        'p_p_m': '#e377c2'
     }
 
-    
-    for metric in metrics:
-        values = df_team_metrics[metric]
-        ax_metric.bar(team_labels_metric, values, bottom=bottom, 
-                      color=colors_metric[metric], label=metric_labels[metric])
-        bottom += values.values
+    # Рисуем
+    x = np.arange(len(df_team_metrics))
+    fig_metric, ax_metric = plt.subplots(figsize=(12, 7))
+
+    # Положительные вверх
+    bottom_pos = np.zeros(len(df_team_metrics))
+    for i, metric in enumerate(metrics):
+        vals = pos_df[metric].values
+        ax_metric.bar(x, vals, bottom=bottom_pos, color=colors_metric[metric], label=metric_labels[metric])
+        bottom_pos = bottom_pos + vals
+
+    # Отрицательные вниз (чтобы было видно отступ от нуля)
+    bottom_neg = np.zeros(len(df_team_metrics))
+    for i, metric in enumerate(metrics):
+        vals = neg_df[metric].values  # отрицательные или ноль
+        if np.any(vals != 0):
+            ax_metric.bar(x, vals, bottom=bottom_neg, color=colors_metric[metric], hatch='////', alpha=0.9)
+            bottom_neg = bottom_neg + vals
+
+    # Подписи и легенда
+    ax_metric.set_xticks(x)
+    ax_metric.set_xticklabels(team_labels_metric, rotation=45, ha='right')
     ax_metric.set_title("Процентное соотношение показателей в общем рейтинге команды", fontsize=14)
     ax_metric.set_xlabel("ID команды", fontsize=12)
-    ax_metric.set_ylabel("Процентный вклад", fontsize=12)
-    ax_metric.legend(title='Показатели', bbox_to_anchor=(1, 1), loc='upper left')
-    plt.xticks(rotation=45)
+    ax_metric.set_ylabel("Процентный вклад (%)", fontsize=12)
+
+    # Уникальная легенда (без дублирования)
+    handles, labels = ax_metric.get_legend_handles_labels()
+    unique = dict(zip(labels, handles))
+    ax_metric.legend(unique.values(), unique.keys(), title='Показатели', bbox_to_anchor=(1, 1), loc='upper left')
+
+    # Горизонтальная линия 100% для ориентира
+    ax_metric.axhline(100, color='k', linestyle='--', linewidth=0.7, alpha=0.5)
+
     plt.tight_layout()
+    plt.show()
+
 
     # 7. Радарная диаграмма для топ-5 команд по суммарному рейтингу
     df_radar = df_players.groupby('ID team')[['p_goals','p_assists', 'p_assists_2', 'p_throws_by','p_shot_on_target','p_blocked_throws','p_p_m','player_rating']].sum().reset_index()
