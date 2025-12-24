@@ -1,12 +1,30 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import accuracy_score, roc_auc_score
 import joblib
 from deap import base, creator, tools, algorithms
 import random
 import sys
+from pathlib import Path
 
-PATH_GAME = '../../data/targeted/game_stats_one_r.csv'
+# Путь к файлу с данными матчей (относительно корня проекта)
+PATH_GAME = Path('data/targeted/game_stats_one_r.csv')
+
+# Функция очистки данных от infinity и NaN
+def clean_data(data):
+    """Очистка данных от infinity и NaN значений."""
+    if isinstance(data, np.ndarray):
+        # Заменяем infinity на большие, но конечные значения
+        data = np.where(np.isinf(data), np.nan, data)
+        # Заменяем NaN на 0
+        data = np.nan_to_num(data, nan=0.0, posinf=1e10, neginf=-1e10)
+    elif isinstance(data, (list, tuple)):
+        data = [0.0 if (not np.isfinite(val) or np.isnan(val)) else val for val in data]
+    return data
 
 # нормализации данных
 def scale_and_select_features(input_file):
@@ -18,12 +36,21 @@ def scale_and_select_features(input_file):
     
     # Выбираем столбцы, которые будут масштабироваться
     selected_columns = df.columns[~df.columns.isin(removed_columns)]
+    
+    # Очистка данных от infinity и NaN перед масштабированием
+    numeric_cols = df[selected_columns].select_dtypes(include=[np.number]).columns
+    df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+    df[numeric_cols] = df[numeric_cols].fillna(0)
 
     # Создаем объект MinMaxScaler для нормализации данных
     scaler = MinMaxScaler()
 
     # Применяем масштабирование к выбранным столбцам
     df[selected_columns] = scaler.fit_transform(df[selected_columns])
+    
+    # Финальная проверка после масштабирования
+    df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+    df[numeric_cols] = df[numeric_cols].fillna(0)
     
     return df
 
@@ -49,8 +76,25 @@ def GetTeamStat(team_id, matches):
         'rating': ['rating_T', 'rating_O']
     }
 
-    team_sums = {key: 0 for key in sum_columns}
-    team_averages = {key: [] for key in avg_columns}
+    # Фильтруем колонки, которые реально существуют в данных
+    available_columns = set(matches.columns)
+    
+    # Фильтруем sum_columns
+    filtered_sum_columns = {}
+    for key, cols in sum_columns.items():
+        existing_cols = [col for col in cols if col in available_columns]
+        if existing_cols:
+            filtered_sum_columns[key] = existing_cols
+    
+    # Фильтруем avg_columns
+    filtered_avg_columns = {}
+    for key, cols in avg_columns.items():
+        existing_cols = [col for col in cols if col in available_columns]
+        if existing_cols:
+            filtered_avg_columns[key] = existing_cols
+
+    team_sums = {key: 0 for key in filtered_sum_columns}
+    team_averages = {key: [] for key in filtered_avg_columns}
 
     for _, row in team_matches.iterrows():
         if row['ID team'] == team_id:
@@ -61,11 +105,11 @@ def GetTeamStat(team_id, matches):
             elif row['result'] == 0:
                 total_draws += 1
 
-            for sum_key, sum_cols in sum_columns.items():
-                team_sums[sum_key] += sum(row[col] for col in sum_cols)
+            for sum_key, sum_cols in filtered_sum_columns.items():
+                team_sums[sum_key] += sum(row[col] if col in row.index else 0 for col in sum_cols)
             
-            for avg_key, avg_cols in avg_columns.items():
-                team_averages[avg_key].extend(row[col] for col in avg_cols)
+            for avg_key, avg_cols in filtered_avg_columns.items():
+                team_averages[avg_key].extend(row[col] if col in row.index else 0 for col in avg_cols)
         else:
             if row['result'] == 1:
                 total_losses += 1
@@ -74,19 +118,25 @@ def GetTeamStat(team_id, matches):
             elif row['result'] == 0:
                 total_draws += 1
 
-            for sum_key, sum_cols in sum_columns.items():
-                team_sums[sum_key] += sum(row[col] for col in sum_cols)
+            for sum_key, sum_cols in filtered_sum_columns.items():
+                team_sums[sum_key] += sum(row[col] if col in row.index else 0 for col in sum_cols)
             
-            for avg_key, avg_cols in avg_columns.items():
-                team_averages[avg_key].extend(row[col] for col in avg_cols)
+            for avg_key, avg_cols in filtered_avg_columns.items():
+                team_averages[avg_key].extend(row[col] if col in row.index else 0 for col in avg_cols)
 
-    team_avg_values = {key: sum(vals) / len(vals) for key, vals in team_averages.items() if vals}
+    team_avg_values = {key: sum(vals) / len(vals) if vals else 0.0 for key, vals in team_averages.items()}
 
     result_vector = [
         total_wins, total_losses, total_draws,
         *team_sums.values(),
         *team_avg_values.values()
     ]
+    
+    # Очистка результата от infinity и NaN
+    result_vector = clean_data(result_vector)
+    
+    # Проверка и замена проблемных значений
+    result_vector = [0.0 if not np.isfinite(val) else val for val in result_vector]
 
     return result_vector
 
@@ -131,6 +181,13 @@ def GetTrainingData(matches, cutoff_date):
             continue
 
         difference_vector = [team_value - opponent_value for team_value, opponent_value in zip(team_vector, opponent_vector)]
+        # Очистка от infinity и NaN
+        difference_vector = clean_data(difference_vector)
+        
+        # Проверка на наличие проблемных значений
+        if not np.all(np.isfinite(difference_vector)):
+            print(f"Warning: Found non-finite values for teams {team_id} vs {opponent_id}, skipping")
+            continue
 
         xTrain[indexCounter_train] = difference_vector
         yTrain[indexCounter_train] = 1 if result == 1 else 0
@@ -150,11 +207,28 @@ def GetTrainingData(matches, cutoff_date):
             continue
 
         difference_vector = [team_value - opponent_value for team_value, opponent_value in zip(team_vector, opponent_vector)]
+        # Очистка от infinity и NaN
+        difference_vector = clean_data(difference_vector)
+        
+        # Проверка на наличие проблемных значений
+        if not np.all(np.isfinite(difference_vector)):
+            print(f"Warning: Found non-finite values for teams {team_id} vs {opponent_id}, skipping")
+            continue
 
         xTest[indexCounter_test] = difference_vector
         yTest[indexCounter_test] = 1 if result == 1 else 0
         
         indexCounter_test += 1
+
+    # Обрезка массивов до реального размера
+    xTrain = xTrain[:indexCounter_train]
+    yTrain = yTrain[:indexCounter_train]
+    xTest = xTest[:indexCounter_test]
+    yTest = yTest[:indexCounter_test]
+    
+    # Финальная очистка массивов
+    xTrain = np.nan_to_num(xTrain, nan=0.0, posinf=1e10, neginf=-1e10)
+    xTest = np.nan_to_num(xTest, nan=0.0, posinf=1e10, neginf=-1e10)
 
     return xTrain, yTrain, xTest, yTest
 
@@ -163,7 +237,15 @@ def get_team_win_probability(new_models, matches, team1_id, team2_id):
     team1_vector = GetTeamStat(team1_id, matches)
     team2_vector = GetTeamStat(team2_id, matches)
     difference_vector = [team1_value - team2_value for team1_value, team2_value in zip(team1_vector, team2_vector)]
-    #predicted_probability = new_models["LogisticRegression"].predict_proba([difference_vector])[:, 1]
+    # Очистка от infinity и NaN
+    difference_vector = clean_data(difference_vector)
+    
+    # Проверка на наличие проблемных значений
+    if not np.all(np.isfinite(difference_vector)):
+        # Если есть проблемы, возвращаем нейтральную вероятность
+        print(f"Warning: Found non-finite values for teams {team1_id} vs {team2_id}, using default probability")
+        return 0.5
+    
     predicted_probability = new_models.predict_proba([difference_vector])[:, 1]
     
     return predicted_probability[0]
@@ -196,8 +278,13 @@ def get_team_win_probabilities(new_models, team_id, matches):
     return win_probabilities
 
 
-def process_season_data(season):
-    game_stats = pd.read_csv(r"C:\Users\optem\Desktop\Magistracy\Диссертация\ML-in-sports\data\targeted\game_stats_one_r.csv")
+def process_season_data(season, game_stats_path=None):
+    if game_stats_path is None:
+        game_stats_path = PATH_GAME
+    # Преобразуем Path в строку, если нужно
+    if isinstance(game_stats_path, Path):
+        game_stats_path = str(game_stats_path)
+    game_stats = pd.read_csv(game_stats_path)
 
     min_season_date = game_stats[game_stats['ID season'] == season]['date'].min()
 
@@ -237,22 +324,42 @@ def process_season_data(season):
     return game_before_season_var, unique_teams
 
 # Функция для получения вероятностей побед для всех уникальных матчей в каждом дивизионе
-def simulate_all_matches(new_models, division_teams, matches):
+def simulate_all_matches(division_teams, model=None, matches=None, model_path='MODEL.pkl'):
+    """
+    Симулирует все матчи между командами в каждом дивизионе.
+    
+    Args:
+        division_teams: словарь {division: [team_ids]}
+        model: обученная модель (если None, загружается из model_path)
+        matches: DataFrame с матчами (если None, загружается из PATH_GAME)
+        model_path: путь к файлу модели
+    
+    Returns:
+        DataFrame с результатами симуляции матчей
+    """
     try:
+        # Загрузка модели, если не передана
+        if model is None:
+            # Преобразуем Path в строку, если нужно
+            if isinstance(model_path, Path):
+                model_path = str(model_path)
+            model = joblib.load(model_path)
+        
+        # Загрузка данных матчей, если не переданы
+        if matches is None:
+            game_stats = pd.read_csv(str(PATH_GAME))
+            matches = scale_and_select_features(game_stats)
+            matches["result"] = matches["result"].map({'W': 1, 'L': -1, 'D': 0})
+        
         match_results = []
-        #print(division_teams)
         for division, teams in division_teams.items():
             for i in range(len(teams)):
                 for j in range(i + 1, len(teams)):  # Изменено для избегания дублирования матчей
                     team1_id = teams[i]
                     team2_id = teams[j]
-                    #print(f"team1_id = {team1_id}")
-                    #print(f"team2_id = {team1_id}")
                     # Получение вероятности победы команды 1
-                    win_probability_lr1 = get_team_win_probability(new_models, matches, team1_id, team2_id)
-                    win_probability_lr2 = get_team_win_probability(new_models, matches, team2_id, team1_id)
-                    #print(f"team1_id predict = {win_probability_lr1}")
-                    #print(f"team2_id predict = {win_probability_lr2}")
+                    win_probability_lr1 = get_team_win_probability(model, matches, team1_id, team2_id)
+                    win_probability_lr2 = get_team_win_probability(model, matches, team2_id, team1_id)
                     # Получение вероятностей
                     probabilities = [win_probability_lr1, win_probability_lr2]
                     
@@ -267,7 +374,8 @@ def simulate_all_matches(new_models, division_teams, matches):
                         '% opponent': normalized_probs[1] * 100
                     })
     except Exception as es:
-        print(es)
+        print(f"Ошибка в simulate_all_matches: {es}")
+        raise
     return pd.DataFrame(match_results)
 
 # Функция для вычисления среднего значения наибольших вероятностей для каждого дивизиона
@@ -277,76 +385,212 @@ def calculate_average_highest_probabilities(match_df):
     )
     return division_probabilities
 
-# Генетический алгоритм распределения, работает на данном этапе лучше предыдущих
-# def rank_teams(matches, list_team, model_file, num_divisions, min_teams_per_division=3, num_generations=100, population_size=300):
-#     #model = joblib.load(model_file)
-#     model = model_file
-#     # Получение уникальных команд
-#     unique_teams = list_team['ID team'].unique()
-#     num_teams = len(unique_teams)
-#     if num_teams < num_divisions * min_teams_per_division:
-#         raise ValueError("Недостаточно команд для распределения по заданному количеству дивизионов")
-
-#     # Генерация всех возможных матчей
-#     all_matches = []
-#     for team1 in unique_teams:
-#         for team2 in unique_teams:
-#             if team1 != team2:
-#                 win_prob1 = get_team_win_probability(model, matches, team1, team2)
-#                 win_prob2 = get_team_win_probability(model, matches, team1, team2)
-#                 probabilities = normalize_probabilities([win_prob1, win_prob2])
-#                 all_matches.append([team1, team2, probabilities[0] * 100, probabilities[1] * 100])
+# Функция обучения моделей
+def train_models(cutoff_date='2024-10-28', game_stats_path=None, model_save_path='MODEL.pkl'):
+    """
+    Обучает модели машинного обучения для прогнозирования результатов матчей.
     
-#     matches_df = pd.DataFrame(all_matches, columns=['ID team', 'ID opponent', '%T', '%O'])
-#     # Генетический алгоритм
-#     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-#     creator.create("Individual", list, fitness=creator.FitnessMin)
-
-#     toolbox = base.Toolbox()
-#     toolbox.register("indices", random.sample, range(num_teams), num_teams)
-#     toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.indices)
-#     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-
-#     def evaluate(individual):
-#         # Разбиваем индивид на дивизионы
-#         divisions = [individual[i::num_divisions] for i in range(num_divisions)]
+    Args:
+        cutoff_date: дата разделения на обучающую и тестовую выборки
+        game_stats_path: путь к файлу с данными матчей
+        model_save_path: путь для сохранения обученной модели
+    
+    Returns:
+        Обученная модель LogisticRegression
+    """
+    if game_stats_path is None:
+        game_stats_path = PATH_GAME
+    
+    # Преобразуем Path в строку, если нужно
+    if isinstance(game_stats_path, Path):
+        game_stats_path = str(game_stats_path)
+    
+    # Загрузка и подготовка данных
+    df = pd.read_csv(game_stats_path)
+    matches = scale_and_select_features(df)
+    matches["result"] = matches["result"].map({'W': 1, 'L': -1, 'D': 0})
+    
+    # Проверка и очистка данных от infinity и NaN
+    numeric_cols = matches.select_dtypes(include=[np.number]).columns
+    matches[numeric_cols] = matches[numeric_cols].replace([np.inf, -np.inf], np.nan)
+    matches[numeric_cols] = matches[numeric_cols].fillna(0)
+    
+    # Получение обучающих и тестовых данных
+    xTrain, yTrain, xTest, yTest = GetTrainingData(matches, cutoff_date)
+    
+    # Финальная проверка обучающих данных
+    if len(xTrain) == 0:
+        raise ValueError("Недостаточно данных для обучения после очистки")
+    
+    # Проверка на наличие проблемных значений в обучающих данных
+    if not np.all(np.isfinite(xTrain)):
+        print("Warning: Found non-finite values in training data, cleaning...")
+        xTrain = np.nan_to_num(xTrain, nan=0.0, posinf=1e10, neginf=-1e10)
+    
+    if not np.all(np.isfinite(xTest)):
+        print("Warning: Found non-finite values in test data, cleaning...")
+        xTest = np.nan_to_num(xTest, nan=0.0, posinf=1e10, neginf=-1e10)
+    
+    # Гиперпараметры для моделей
+    gb_param_grid = {
+        'learning_rate': [0.01, 0.1, 0.5],
+        'n_estimators': [50, 100, 200]
+    }
+    
+    rf_param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 5, 10]
+    }
+    
+    param_grid = {
+        'penalty': ['l1', 'l2'],
+        'C': [0.01, 0.1, 1.0, 10.0],
+        'solver': ['liblinear', 'saga']
+    }
+    
+    # Создание и обучение моделей с подбором гиперпараметров
+    new_models = {
+        "LogisticRegression": GridSearchCV(LogisticRegression(solver='sag', max_iter=10000), param_grid, cv=5, scoring='accuracy'),
+        "GradientBoosting": GridSearchCV(GradientBoostingClassifier(), gb_param_grid, cv=5, scoring='accuracy'),
+        "RandomForest": GridSearchCV(RandomForestClassifier(), rf_param_grid, cv=5, scoring='accuracy')
+    }
+    
+    # Обучение моделей
+    for name, model in new_models.items():
+        model.fit(xTrain, yTrain)
+        y_pred = model.predict(xTest)
+        y_pred_proba = model.predict_proba(xTest)[:, 1]
         
-#         # Проверка на минимальное количество команд в каждом дивизионе
-#         if any(len(div) < min_teams_per_division for div in divisions):
-#             return float('inf'),
-#         # Проверка на уникальность команд
-#         flat_list = [item for sublist in divisions for item in sublist]
-#         if len(flat_list) != len(set(flat_list)):
-#             return float('inf'),
+        accuracy = accuracy_score(yTest, y_pred)
+        auc = roc_auc_score(yTest, y_pred_proba)
         
-#         score = 0
-#         for div in divisions:
-#             div_teams = unique_teams[div]
-#             div_matches = matches_df[(matches_df['ID team'].isin(div_teams)) & (matches_df['ID opponent'].isin(div_teams))]
-#             max_probs = div_matches[['%T', '%O']].max(axis=1)
-#             score += max_probs.mean()
-#         score /= num_divisions
-#         return score,
-
-#     toolbox.register("mate", tools.cxTwoPoint)
-#     toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.05)
-#     toolbox.register("select", tools.selTournament, tournsize=3)
-#     toolbox.register("evaluate", evaluate)
-#     population = toolbox.population(n=population_size)
-#     algorithms.eaSimple(population, toolbox, cxpb=0.5, mutpb=0.2, ngen=num_generations, verbose=False)
-
-#     best_ind = tools.selBest(population, 1)[0]
-#     divisions = [best_ind[i::num_divisions] for i in range(num_divisions)]
-#     final_divisions = []
-#     for i, div in enumerate(divisions):
-#         for idx in div:
-#             final_divisions.append([unique_teams[idx], f'Division {i+1}'])
+        print(f"{name}: Accuracy={accuracy:.4f}, AUC={auc:.4f}")
     
-#     final_df = pd.DataFrame(final_divisions, columns=['ID team', 'division'])
+    # Сохранение лучшей модели (LogisticRegression)
+    best_model = new_models["LogisticRegression"].best_estimator_
     
-#     # Сохранение финальной таблицы
-#     matches_df.to_csv('data/interim/matches_rangirov.csv', index=False)
-#     final_df.to_csv('team_rangirov.csv', index=False)
-#     #final_df.to_excel('xlsx.xlsx', index=False, float_format='%.2f')
-#     print(f"Количество уникальных команд: {len(final_df)}")
+    # Преобразуем Path в строку, если нужно
+    if isinstance(model_save_path, Path):
+        model_save_path = str(model_save_path)
+    
+    # Сохраняем модель
+    joblib.dump(best_model, model_save_path)
+    print(f"Модель сохранена в {model_save_path}")
+    
+    return best_model
+
+# Генетический алгоритм распределения команд по дивизионам
+def rank_teams(list_team, model_file, num_divisions, min_teams_per_division=3, num_generations=100, population_size=300, matches=None, game_stats_path=None):
+    """
+    Распределяет команды по дивизионам с использованием генетического алгоритма.
+    Цель: минимизировать среднее значение наибольших вероятностей в каждом дивизионе,
+    чтобы команды были более равны по силе.
+    
+    Args:
+        list_team: DataFrame с колонками 'ID team' и опционально 'division'
+        model_file: путь к файлу модели или сама модель
+        num_divisions: количество дивизионов
+        min_teams_per_division: минимальное количество команд в дивизионе
+        num_generations: количество поколений генетического алгоритма
+        population_size: размер популяции
+        matches: DataFrame с матчами (если None, загружается из game_stats_path)
+        game_stats_path: путь к файлу с данными матчей
+    
+    Returns:
+        DataFrame с распределением команд по дивизионам
+    """
+    # Загрузка модели
+    if isinstance(model_file, str):
+        model = joblib.load(model_file)
+    else:
+        model = model_file
+    
+    # Загрузка данных матчей, если не переданы
+    if matches is None:
+        if game_stats_path is None:
+            game_stats_path = PATH_GAME
+        # Преобразуем Path в строку, если нужно
+        if isinstance(game_stats_path, Path):
+            game_stats_path = str(game_stats_path)
+        game_stats = pd.read_csv(game_stats_path)
+        matches = scale_and_select_features(game_stats)
+        matches["result"] = matches["result"].map({'W': 1, 'L': -1, 'D': 0})
+    
+    # Получение уникальных команд
+    unique_teams = list_team['ID team'].unique()
+    num_teams = len(unique_teams)
+    if num_teams < num_divisions * min_teams_per_division:
+        raise ValueError("Недостаточно команд для распределения по заданному количеству дивизионов")
+
+    # Генерация всех возможных матчей
+    all_matches = []
+    for team1 in unique_teams:
+        for team2 in unique_teams:
+            if team1 != team2:
+                win_prob1 = get_team_win_probability(model, matches, team1, team2)
+                win_prob2 = get_team_win_probability(model, matches, team2, team1)
+                probabilities = normalize_probabilities([win_prob1, win_prob2])
+                all_matches.append([team1, team2, probabilities[0] * 100, probabilities[1] * 100])
+    
+    matches_df = pd.DataFrame(all_matches, columns=['ID team', 'ID opponent', '%T', '%O'])
+    
+    # Генетический алгоритм
+    # Проверяем, не созданы ли уже типы
+    if not hasattr(creator, "FitnessMin"):
+        creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+    if not hasattr(creator, "Individual"):
+        creator.create("Individual", list, fitness=creator.FitnessMin)
+
+    toolbox = base.Toolbox()
+    toolbox.register("indices", random.sample, range(num_teams), num_teams)
+    toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.indices)
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+
+    def evaluate(individual):
+        # Разбиваем индивид на дивизионы
+        divisions = [individual[i::num_divisions] for i in range(num_divisions)]
+        
+        # Проверка на минимальное количество команд в каждом дивизионе
+        if any(len(div) < min_teams_per_division for div in divisions):
+            return float('inf'),
+        # Проверка на уникальность команд
+        flat_list = [item for sublist in divisions for item in sublist]
+        if len(flat_list) != len(set(flat_list)):
+            return float('inf'),
+        
+        score = 0
+        for div in divisions:
+            div_teams = unique_teams[div]
+            div_matches = matches_df[(matches_df['ID team'].isin(div_teams)) & (matches_df['ID opponent'].isin(div_teams))]
+            if len(div_matches) == 0:
+                return float('inf'),
+            max_probs = div_matches[['%T', '%O']].max(axis=1)
+            score += max_probs.mean()
+        score /= num_divisions
+        return score,
+
+    toolbox.register("mate", tools.cxTwoPoint)
+    toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.05)
+    toolbox.register("select", tools.selTournament, tournsize=3)
+    toolbox.register("evaluate", evaluate)
+    population = toolbox.population(n=population_size)
+    algorithms.eaSimple(population, toolbox, cxpb=0.5, mutpb=0.2, ngen=num_generations, verbose=False)
+
+    best_ind = tools.selBest(population, 1)[0]
+    divisions = [best_ind[i::num_divisions] for i in range(num_divisions)]
+    final_divisions = []
+    for i, div in enumerate(divisions):
+        for idx in div:
+            final_divisions.append([unique_teams[idx], f'Division {i+1}'])
+    
+    final_df = pd.DataFrame(final_divisions, columns=['ID team', 'division'])
+    
+    # Сохранение финальной таблицы
+    output_dir = Path('data/interim')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    matches_df.to_csv(output_dir / 'matches_rangirov.csv', index=False)
+    final_df.to_csv('team_rangirov.csv', index=False)
+    
+    print(f"Количество уникальных команд: {len(final_df)}")
+    return final_df
 
