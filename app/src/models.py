@@ -27,15 +27,23 @@ def clean_data(data):
     return data
 
 # нормализации данных
-def scale_and_select_features(input_file):
+def scale_and_select_features(input_file, min_games=1):
     # Считываем данные из CSV файла
     df = input_file
+
+    # Проверка на пустой DataFrame
+    if df.empty or len(df) < min_games:
+        raise ValueError(f"Недостаточно данных для масштабирования. Требуется минимум {min_games} игр, получено {len(df)}")
 
     # Определяем список столбцов, которые будут удалены перед масштабированием
     removed_columns = ["ID team", "ID opponent", "result", "ID game", "ID season", "stage", "division", "date"]
     
     # Выбираем столбцы, которые будут масштабироваться
     selected_columns = df.columns[~df.columns.isin(removed_columns)]
+    
+    # Проверка на наличие столбцов для масштабирования
+    if len(selected_columns) == 0:
+        raise ValueError("Нет столбцов для масштабирования")
     
     # Очистка данных от infinity и NaN перед масштабированием
     numeric_cols = df[selected_columns].select_dtypes(include=[np.number]).columns
@@ -252,10 +260,14 @@ def get_team_win_probability(new_models, matches, team1_id, team2_id):
 
 # Преобразование вероятностей в проценты с помощью нормализации
 def normalize_probabilities(probabilities):
-    total_prob = sum(probabilities)
+    # Очистка от infinity и NaN
+    cleaned_probs = [0.0 if not np.isfinite(p) or np.isnan(p) else p for p in probabilities]
+    total_prob = sum(cleaned_probs)
     if total_prob == 0:
-        return [0] * len(probabilities)
-    normalized_probs = [prob / total_prob for prob in probabilities]
+        return [0.0] * len(probabilities)
+    normalized_probs = [prob / total_prob for prob in cleaned_probs]
+    # Финальная проверка
+    normalized_probs = [0.0 if not np.isfinite(p) else p for p in normalized_probs]
     return normalized_probs
 
 # Функция для получения уникальных команд
@@ -301,6 +313,9 @@ def process_season_data(season, game_stats_path=None):
     # Получение уникальных номеров команд и их дивизионов
     unique_teams = pd.concat([current_season_games[['ID team', 'division']],
                               current_season_games[['ID opponent', 'division']].rename(columns={'ID opponent': 'ID team'})]).drop_duplicates()
+    
+    # Фильтруем только реальные дивизионы (убираем NaN и пустые значения)
+    unique_teams = unique_teams[unique_teams['division'].notna()]
     
     # Извлечение уникальных номеров команд
     unique_team_ids = unique_teams['ID team'].unique()
@@ -350,21 +365,48 @@ def simulate_all_matches(division_teams, model=None, matches=None, model_path='M
             game_stats = pd.read_csv(str(PATH_GAME))
             matches = scale_and_select_features(game_stats)
             matches["result"] = matches["result"].map({'W': 1, 'L': -1, 'D': 0})
+            
+            # Финальная очистка данных от infinity и NaN
+            numeric_cols = matches.select_dtypes(include=[np.number]).columns
+            matches[numeric_cols] = matches[numeric_cols].replace([np.inf, -np.inf], np.nan)
+            matches[numeric_cols] = matches[numeric_cols].fillna(0)
         
         match_results = []
         for division, teams in division_teams.items():
+            # Пропускаем пустые дивизионы или дивизионы без команд
+            if not teams or len(teams) == 0:
+                continue
+            
+            # Пропускаем дивизионы с NaN значениями
+            if pd.isna(division):
+                continue
+                
             for i in range(len(teams)):
                 for j in range(i + 1, len(teams)):  # Изменено для избегания дублирования матчей
                     team1_id = teams[i]
                     team2_id = teams[j]
+                    
+                    # Пропускаем если команды не валидны
+                    if pd.isna(team1_id) or pd.isna(team2_id):
+                        continue
+                    
                     # Получение вероятности победы команды 1
                     win_probability_lr1 = get_team_win_probability(model, matches, team1_id, team2_id)
                     win_probability_lr2 = get_team_win_probability(model, matches, team2_id, team1_id)
+                    
+                    # Проверка на валидность вероятностей
+                    if not np.isfinite(win_probability_lr1) or not np.isfinite(win_probability_lr2):
+                        continue
+                    
                     # Получение вероятностей
                     probabilities = [win_probability_lr1, win_probability_lr2]
                     
                     # Нормализация вероятностей
                     normalized_probs = normalize_probabilities(probabilities)
+                    
+                    # Проверка на валидность нормализованных вероятностей
+                    if not all(np.isfinite(p) for p in normalized_probs):
+                        continue
                         
                     match_results.append({
                         'ID team': team1_id,
@@ -380,9 +422,26 @@ def simulate_all_matches(division_teams, model=None, matches=None, model_path='M
 
 # Функция для вычисления среднего значения наибольших вероятностей для каждого дивизиона
 def calculate_average_highest_probabilities(match_df):
+    # Очистка данных от infinity и NaN перед вычислениями
+    if not match_df.empty:
+        numeric_cols = match_df.select_dtypes(include=[np.number]).columns
+        match_df = match_df.copy()
+        match_df[numeric_cols] = match_df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+        match_df[numeric_cols] = match_df[numeric_cols].fillna(0)
+    
+    # Фильтруем только дивизионы, которые реально есть в данных
+    if match_df.empty:
+        return pd.Series(dtype=float)
+    
+    # Группируем только по дивизионам, которые есть в данных
     division_probabilities = match_df.groupby('division').apply(
         lambda df: df[['% team', '% opponent']].max(axis=1).mean()
     )
+    
+    # Удаляем дивизионы с NaN или infinity значениями
+    division_probabilities = division_probabilities[division_probabilities.notna()]
+    division_probabilities = division_probabilities[np.isfinite(division_probabilities)]
+    
     return division_probabilities
 
 # Функция обучения моделей

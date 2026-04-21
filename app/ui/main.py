@@ -19,6 +19,8 @@ from ui.controllers.charts_controller import ChartsController
 from ui.controllers.player_rt_intg_controller import PlayerRtIntgController
 from ui.controllers.player_rt_red_controller import PlayerRtRedController
 from ui.controllers.bayesian_controller import BayesianController
+from ui.controllers.division_controller import DivisionController
+from ui.controllers.player_division_analysis_controller import PlayerDivisionAnalysisController
 
 def main():
     """
@@ -36,6 +38,8 @@ def main():
     app.register_controller("Рейтинг игроков (интегральный метод)", PlayerRtIntgController())
     app.register_controller("Рейтинг игроков (советский метод)", PlayerRtRedController())
     app.register_controller("Байесовский метод", BayesianController())
+    app.register_controller("Распределение команд по дивизионам", DivisionController())
+    app.register_controller("Анализ рейтингов игроков по дивизионам", PlayerDivisionAnalysisController())
     
     # Запускаем цикл обработки событий и отображение интерфейса
     app.run()
