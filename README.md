@@ -120,12 +120,5 @@ MIT License
 
 - **Автор**: Pavel Fatyanov
 - **Университет**: Novosibirsk State Technical University
-- **Научные руководители**: 
+- **Научный руководитель**: 
   - Maxim Bakaev
-  - Elizaveta Ulederkina
-
-## 🙏 Благодарности
-
-Особая благодарность за помощь в разработке:
-- Команде НГТУ
-- Всем контрибьюторам проекта
